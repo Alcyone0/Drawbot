@@ -46,6 +46,11 @@ float distance_en_cm_roue_droite = 0;
 float deltaX_wifi = 0;
 float deltaY_wifi = 0;
 
+/* ===== LOGS ===== */
+const int MAX_LOGS = 20;
+String logs[MAX_LOGS];
+int logIndex = 0;
+
 /* === UTILS === */
 void countLeftEncoder()  { countLeft++; }
 void countRightEncoder() { countRight++; }
@@ -88,16 +93,46 @@ float calculerDeltaRoueDroiteY(float deltaStyloX, float deltaStyloY) {
   return deltaCentreY - (LARGEUR_ROBOT / 2.0) * sin(theta);
 }
 
+void addLog(String message) {
+  // Ajouter l'horodatage
+  unsigned long ms = millis();
+  String logMessage = String(ms) + "ms: " + message;
+  
+  // Enregistrer dans le tableau circulaire
+  logs[logIndex] = logMessage;
+  logIndex = (logIndex + 1) % MAX_LOGS;
+  
+  // Afficher aussi sur le moniteur série
+  Serial.println(logMessage);
+}
+
+String getAllLogs() {
+  String allLogs = "";
+  int count = 0;
+  
+  // Parcourir les logs à partir du plus récent
+  for (int i = 0; i < MAX_LOGS; i++) {
+    int idx = (logIndex - 1 - i + MAX_LOGS) % MAX_LOGS;
+    if (logs[idx].length() > 0) {
+      allLogs += logs[idx] + "<br>";
+      count++;
+    }
+  }
+  
+  return allLogs.length() > 0 ? allLogs : "Aucun log disponible";
+}
+
 void demarer(float deltaX, float deltaY)
 {
   distance_en_cm_roue_gauche = calculerDeltaRoueGaucheY(deltaX, deltaY);
   distance_en_cm_roue_droite = calculerDeltaRoueDroiteY(deltaX, deltaY);
   
-  // Affichage des valeurs de debug
-  Serial.print("DX="); Serial.print(deltaX); 
-  Serial.print(", DY="); Serial.print(deltaY);
-  Serial.print(", Distance Gauche="); Serial.print(distance_en_cm_roue_gauche);
-  Serial.print(", Distance Droite="); Serial.println(distance_en_cm_roue_droite);
+  // Enregistrer les valeurs dans les logs
+  String logMsg = "DX=" + String(deltaX) + 
+                  ", DY=" + String(deltaY) + 
+                  ", Distance Gauche=" + String(distance_en_cm_roue_gauche) + 
+                  ", Distance Droite=" + String(distance_en_cm_roue_droite);
+  addLog(logMsg);
   
   seuilImpulsionsRoueGauche = distance_en_cm_roue_gauche * IMPULSIONS_PAR_CM;
   seuilImpulsionsRoueDroite = distance_en_cm_roue_droite * IMPULSIONS_PAR_CM;
@@ -127,14 +162,28 @@ bool avancerCorrige() {
 
   analogWrite(EN_D, pwmD);
   analogWrite(EN_G, pwmG);
+  
+  // Ajouter un log périodique (tous les 500ms) pour ne pas saturer
+  static unsigned long lastLogTime = 0;
+  if (millis() - lastLogTime > 500) {
+    addLog("Progression: G=" + String(countLeft) + "/" + String(seuilImpulsionsRoueGauche) + 
+           " D=" + String(countRight) + "/" + String(seuilImpulsionsRoueDroite) + 
+           " (" + String(int(ratioMoyen*100)) + "%)");
+    lastLogTime = millis();
+  }
 
-  return (countLeft >= seuilImpulsionsRoueGauche) && (countRight >= seuilImpulsionsRoueDroite);
+  bool fini = (countLeft >= seuilImpulsionsRoueGauche) && (countRight >= seuilImpulsionsRoueDroite);
+  if (fini) {
+    addLog("Déplacement terminé");
+  }
+  return fini;
 }
 
 void setup()
 {
   Serial.begin(115200);
   delay(1000);
+  addLog("Drawbot démarré");
 
   Wire.begin();
   if (imu.begin() != 0) {
@@ -154,8 +203,8 @@ void setup()
 
   WiFi.softAP(ssid, password);
   server.begin();
-  Serial.print("Adresse IP : ");
-  Serial.println(WiFi.softAPIP());
+  String ipAddress = WiFi.softAPIP().toString();
+  addLog("WiFi AP démarré - IP: " + ipAddress);
 }
 
 void loop() {
@@ -181,16 +230,30 @@ void loop() {
     }
 
     String html = "<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Drawbot WiFi</title>";
-    html += "<style>body{font-family:Arial;text-align:center;background:#f2f2f2;padding:40px;}";
-    html += "form{background:#fff;padding:25px;border-radius:12px;box-shadow:0 0 10px #888;display:inline-block;}";
-    html += "input{padding:10px;margin:10px;border-radius:5px;}";
-    html += "input[type=submit]{background:#4CAF50;color:white;border:none;}";
-    html += "input[type=submit]:hover{background:#45a049;}</style></head><body>";
-    html += "<h1>Commande deltaX / deltaY</h1>";
+    html += "<style>";
+    html += "body{font-family:Arial;text-align:center;background:#f2f2f2;padding:20px;}";
+    html += "form{background:#fff;padding:20px;border-radius:12px;box-shadow:0 0 10px #888;display:inline-block;margin-bottom:20px;width:80%;max-width:400px;}";
+    html += "input{padding:10px;margin:8px;border-radius:5px;width:80%;}";
+    html += "input[type=submit]{background:#4CAF50;color:white;border:none;cursor:pointer;}";
+    html += "input[type=submit]:hover{background:#45a049;}";
+    html += ".log-container{background:#fff;border-radius:12px;box-shadow:0 0 10px #888;padding:15px;margin:0 auto;width:90%;max-width:800px;text-align:left;max-height:400px;overflow-y:auto;}";
+    html += ".log-entry{font-family:monospace;font-size:0.9em;margin:3px 0;border-bottom:1px solid #eee;padding-bottom:3px;}";
+    html += "h2{color:#333;margin-top:25px;}";
+    html += "</style>";
+    // Pas de rafraîchissement automatique
+    html += "</head><body>";
+    html += "<h1>Drawbot WiFi</h1>";
     html += "<form method='GET'>";
-    html += "deltaX (cm): <input type='number' name='dx' step='0.1'><br>";
-    html += "deltaY (cm): <input type='number' name='dy' step='0.1'><br>";
-    html += "<input type='submit' value='Envoyer'></form></body></html>";
+    html += "<h2>Commande</h2>";
+    html += "deltaX (cm): <input type='number' name='dx' step='0.1' value='" + String(deltaX_wifi) + "'><br>";
+    html += "deltaY (cm): <input type='number' name='dy' step='0.1' value='" + String(deltaY_wifi) + "'><br>";
+    html += "<input type='submit' value='Envoyer'></form>";
+    
+    // Affichage des logs
+    html += "<h2>Logs</h2>";
+    html += "<div class='log-container'>";
+    html += getAllLogs();
+    html += "</div>";
 
     client.println("HTTP/1.1 200 OK");
     client.println("Content-type:text/html");
