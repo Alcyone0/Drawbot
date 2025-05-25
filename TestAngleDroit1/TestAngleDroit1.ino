@@ -28,7 +28,7 @@ volatile long countRight = 0;
 bool demarre = false;
 bool atteint = false;
 bool correctionActive = false;
-bool deplacementFait = false;
+bool deplacementFait = true; // Set to true initially to prevent movement until WiFi instructions
 
 /* ===== PARAMÈTRES ===== */
 const float IMPULSIONS_PAR_CM = 34.0;
@@ -69,6 +69,10 @@ void calibrerGyro()
 }
 
 float calculerTheta(float deltaX, float deltaY) {
+  // Protection contre division par zéro
+  if (deltaY == 0) {
+    return (deltaX >= 0) ? PI/2 : -PI/2;
+  }
   return atan2(deltaX, deltaY);
 }
 
@@ -88,6 +92,13 @@ void demarer(float deltaX, float deltaY)
 {
   distance_en_cm_roue_gauche = calculerDeltaRoueGaucheY(deltaX, deltaY);
   distance_en_cm_roue_droite = calculerDeltaRoueDroiteY(deltaX, deltaY);
+  
+  // Affichage des valeurs de debug
+  Serial.print("DX="); Serial.print(deltaX); 
+  Serial.print(", DY="); Serial.print(deltaY);
+  Serial.print(", Distance Gauche="); Serial.print(distance_en_cm_roue_gauche);
+  Serial.print(", Distance Droite="); Serial.println(distance_en_cm_roue_droite);
+  
   seuilImpulsionsRoueGauche = distance_en_cm_roue_gauche * IMPULSIONS_PAR_CM;
   seuilImpulsionsRoueDroite = distance_en_cm_roue_droite * IMPULSIONS_PAR_CM;
   countLeft = 0;
@@ -148,6 +159,11 @@ void setup()
 }
 
 void loop() {
+  // Assurer que le robot ne bouge pas au démarrage
+  if (!deplacementFait && !correctionActive) {
+    arreter();
+  }
+  
   WiFiClient client = server.available();
   if (client) {
     while (!client.available()) delay(1);
