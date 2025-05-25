@@ -81,16 +81,38 @@ float calculerTheta(float deltaX, float deltaY) {
   return atan2(deltaX, deltaY);
 }
 
+// Calcul simplifié pour le déplacement de la roue gauche
 float calculerDeltaRoueGaucheY(float deltaStyloX, float deltaStyloY) {
-  float theta = calculerTheta(deltaStyloX, deltaStyloY);
-  float deltaCentreY = deltaStyloY - DIST_STYLO_CM * cos(theta);
-  return deltaCentreY + (LARGEUR_ROBOT / 2.0) * sin(theta);
+  // Pour une rotation pure (quand deltaY = 0)
+  if (abs(deltaStyloY) < 0.05) {
+    return deltaStyloX * (LARGEUR_ROBOT / 2.0) / DIST_STYLO_CM;
+  }
+  
+  // Pour un mouvement en ligne droite (quand deltaX = 0)
+  if (abs(deltaStyloX) < 0.05) {
+    return deltaStyloY;
+  }
+  
+  // Pour les déplacements combinés, utiliser la formule approximée
+  float deltaTheta = deltaStyloX / deltaStyloY; // Approximation pour petits angles
+  return deltaStyloY + (LARGEUR_ROBOT / 2.0) * deltaTheta;
 }
 
+// Calcul simplifié pour le déplacement de la roue droite
 float calculerDeltaRoueDroiteY(float deltaStyloX, float deltaStyloY) {
-  float theta = calculerTheta(deltaStyloX, deltaStyloY);
-  float deltaCentreY = deltaStyloY - DIST_STYLO_CM * cos(theta);
-  return deltaCentreY - (LARGEUR_ROBOT / 2.0) * sin(theta);
+  // Pour une rotation pure (quand deltaY = 0)
+  if (abs(deltaStyloY) < 0.05) {
+    return -deltaStyloX * (LARGEUR_ROBOT / 2.0) / DIST_STYLO_CM;
+  }
+  
+  // Pour un mouvement en ligne droite (quand deltaX = 0)
+  if (abs(deltaStyloX) < 0.05) {
+    return deltaStyloY;
+  }
+  
+  // Pour les déplacements combinés, utiliser la formule approximée
+  float deltaTheta = deltaStyloX / deltaStyloY; // Approximation pour petits angles
+  return deltaStyloY - (LARGEUR_ROBOT / 2.0) * deltaTheta;
 }
 
 void addLog(String message) {
@@ -156,10 +178,10 @@ void demarer(float deltaX, float deltaY)
   seuilImpulsionsRoueDroite = abs(distance_en_cm_roue_droite * IMPULSIONS_PAR_CM);
   
   // Enregistrer les valeurs dans les logs avec plus de détails
-  String logMsg = "Commande reçue: DX=" + String(deltaX) + 
-                  ", DY=" + String(deltaY) + 
-                  ", Distance Gauche=" + String(distance_en_cm_roue_gauche) + " cm" +
-                  ", Distance Droite=" + String(distance_en_cm_roue_droite) + " cm" + 
+  String logMsg = "Commande reçue: DX=" + String(deltaX, 2) + 
+                  ", DY=" + String(deltaY, 2) + 
+                  ", Distance Gauche=" + String(distance_en_cm_roue_gauche, 2) + " cm" +
+                  ", Distance Droite=" + String(distance_en_cm_roue_droite, 2) + " cm" + 
                   ", Seuil G=" + String(seuilImpulsionsRoueGauche) + 
                   ", Seuil D=" + String(seuilImpulsionsRoueDroite);
   addLog(logMsg);
