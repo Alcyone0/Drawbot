@@ -87,37 +87,37 @@ float calculerTheta(float deltaX, float deltaY) {
 }
 
 // Calcul simplifié pour le déplacement de la roue gauche
-float calculerDeltaRoueGaucheY(float deltaStyloX, float deltaStyloY) {
+float calculerDeltaRoueGaucheY(float deltaRobotX, float deltaRobotY) {
   // Pour une rotation pure (quand deltaY = 0)
-  if (abs(deltaStyloY) < 0.05) {
-    return deltaStyloX * (LARGEUR_ROBOT / 2.0) / DIST_STYLO_CM;
+  if (abs(deltaRobotY) < 0.05) {
+    return deltaRobotX * (LARGEUR_ROBOT / 2.0) / DIST_STYLO_CM;
   }
   
   // Pour un mouvement en ligne droite (quand deltaX = 0)
-  if (abs(deltaStyloX) < 0.05) {
-    return deltaStyloY;
+  if (abs(deltaRobotX) < 0.05) {
+    return deltaRobotY;
   }
   
   // Pour les déplacements combinés, utiliser la formule approximée
-  float deltaTheta = deltaStyloX / deltaStyloY; // Approximation pour petits angles
-  return deltaStyloY + (LARGEUR_ROBOT / 2.0) * deltaTheta;
+  float deltaTheta = deltaRobotX / deltaRobotY; // Approximation pour petits angles
+  return deltaRobotY + (LARGEUR_ROBOT / 2.0) * deltaTheta;
 }
 
 // Calcul simplifié pour le déplacement de la roue droite
-float calculerDeltaRoueDroiteY(float deltaStyloX, float deltaStyloY) {
+float calculerDeltaRoueDroiteY(float deltaRobotX, float deltaRobotY) {
   // Pour une rotation pure (quand deltaY = 0)
-  if (abs(deltaStyloY) < 0.05) {
-    return -deltaStyloX * (LARGEUR_ROBOT / 2.0) / DIST_STYLO_CM;
+  if (abs(deltaRobotY) < 0.05) {
+    return -deltaRobotX * (LARGEUR_ROBOT / 2.0) / DIST_STYLO_CM;
   }
   
   // Pour un mouvement en ligne droite (quand deltaX = 0)
-  if (abs(deltaStyloX) < 0.05) {
-    return deltaStyloY;
+  if (abs(deltaRobotX) < 0.05) {
+    return deltaRobotY;
   }
   
   // Pour les déplacements combinés, utiliser la formule approximée
-  float deltaTheta = deltaStyloX / deltaStyloY; // Approximation pour petits angles
-  return deltaStyloY - (LARGEUR_ROBOT / 2.0) * deltaTheta;
+  float deltaTheta = deltaRobotX / deltaRobotY; // Approximation pour petits angles
+  return deltaRobotY - (LARGEUR_ROBOT / 2.0) * deltaTheta;
 }
 
 void addLog(String message) {
