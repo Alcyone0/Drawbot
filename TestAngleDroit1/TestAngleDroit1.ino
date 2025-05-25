@@ -52,15 +52,29 @@ float deltaY_wifi = 0;
 void demarer(float deltaX, float deltaY); // Déclaration anticipée
 
 /* ===== STRUCTURES ===== */
-struct Point {
+struct DeltaXY {
   float x;
   float y;
   
   // Constructeur par défaut
-  Point() : x(0), y(0) {}
+  DeltaXY() : x(0), y(0) {}
   
   // Constructeur avec paramètres
-  Point(float _x, float _y) : x(_x), y(_y) {}
+  DeltaXY(float _x, float _y) : x(_x), y(_y) {}
+};
+
+// Structure pour représenter la position et l'orientation du robot
+struct RobotState {
+  float x;
+  float y;
+  float theta;        // Orientation du robot en radians
+  
+  // Constructor
+  RobotState(float _x, float _y, float _theta) 
+    : x(_x), y(_y), theta(_theta) {}
+    
+  // Constructeur par défaut
+  RobotState() : x(0), y(0), theta(0) {}
 };
 
 struct WheelDistances {
@@ -138,34 +152,41 @@ WheelDistances calculerDistancesRoues(float deltaRobotX, float deltaRobotY) {
 
 // Fonction pour convertir les coordonnées absolues en coordonnées relatives au robot
 // Utilise une transformation en coordonnées cylindriques/polaires
-Point convertAbsoluteToRobotCoordinates(float deltaAbsoluteX, float deltaAbsoluteY) {
+DeltaXY convertAbsoluteToRobotCoordinates(float deltaAbsoluteX, float deltaAbsoluteY) {
   addLog("[convertCoords] Début de la conversion de coordonnées absolues en relatives");
+  
+  // Créer les structures à partir des variables globales
+  DeltaXY targetPoint(deltaAbsoluteX, deltaAbsoluteY);
+  RobotState robotState(RobotX, RobotY, RobotTheta);
+  
   // Vérifier si le déplacement demandé est trop petit
-  if (abs(deltaAbsoluteX) < 0.001 && abs(deltaAbsoluteY) < 0.001) {
+  if (abs(targetPoint.x) < 0.001 && abs(targetPoint.y) < 0.001) {
     addLog("[convertCoords] Déplacement trop petit, évitement de division par zéro");
-    return Point(0, 0);
+    return DeltaXY(0, 0);
   }
   
   // 1. Convertir les coordonnées absolues en coordonnées polaires
-  float distance = sqrt(deltaAbsoluteX * deltaAbsoluteX + deltaAbsoluteY * deltaAbsoluteY);
-  float angle = atan2(deltaAbsoluteY, deltaAbsoluteX); // Angle par rapport à l'axe X
+  float distance = sqrt(targetPoint.x * targetPoint.x + targetPoint.y * targetPoint.y);
+  float angle = atan2(targetPoint.y, targetPoint.x); // Angle par rapport à l'axe X
   
   // 2. Ajuster l'angle en fonction de l'orientation du robot
-  float angleRelatif = angle - RobotTheta;
+  float angleRelatif = angle - robotState.theta;
   
   // 3. Reconvertir en coordonnées cartésiennes relatives au robot
   float deltaRobotX = distance * cos(angleRelatif); // X dans le repère du robot correspond à un déplacement latéral
   float deltaRobotY = distance * sin(angleRelatif); // Y dans le repère du robot correspond à un déplacement avant
   
+  // Créer un point pour les coordonnées relatives au robot
+  DeltaXY robotRelativePoint(deltaRobotX, deltaRobotY);
+  
   // Afficher les valeurs pour débogage
-
-  addLog("[convertCoords] Absolue (" + String(deltaAbsoluteX, 2) + "," + String(deltaAbsoluteY, 2) + ") -> " +
+  addLog("[convertCoords] Absolue (" + String(targetPoint.x, 2) + "," + String(targetPoint.y, 2) + ") -> " +
          "Distance=" + String(distance, 2) + "cm, Angle=" + String(angle * 180.0 / PI, 1) + "°");
   addLog("[convertCoords] Angle relatif: " + String(angleRelatif * 180.0 / PI, 1) + "° -> Robot (" + 
-         String(deltaRobotX, 2) + "," + String(deltaRobotY, 2) + ")");
+         String(robotRelativePoint.x, 2) + "," + String(robotRelativePoint.y, 2) + ")");
          
-  // Retourner un Point contenant les coordonnées relatives au robot
-  return Point(deltaRobotX, deltaRobotY);
+  // Retourner les coordonnées relatives au robot
+  return robotRelativePoint;
 }
 
 void addLog(String message) {
