@@ -34,14 +34,13 @@ bool deplacementFait = true; // Set to true initially to prevent movement until 
 
 /* ===== PARAMÈTRES ===== */
 const float IMPULSIONS_PAR_CM = 34.0;
-const int   PWM_ROTATION = 80;
-const int   PWM_MARCHE   = 80;
+const int   PWM_MIN = 80;
+const int   PWM_MAX = 110;
 const float DIST_STYLO_CM = 13.0;
 const float LARGEUR_ROBOT = 8.5;
 const float LONGUEUR_ROBOT = 13.0; // Distance entre l'axe des roues et le stylo
 
 /* ===== VARIABLES INTERNES ===== */
-const int basePWM_D = 80;
 long seuilImpulsionsRoueGauche = 0;
 long seuilImpulsionsRoueDroite = 0;
 float distance_en_cm_roue_gauche = 0;
@@ -78,7 +77,7 @@ float RobotY = 0.0;      // Position Y du robot en cm
 float RobotTheta = 0.0;  // Orientation du robot en radians
 
 /* ===== LOGS ===== */
-const int MAX_LOGS = 20;
+const int MAX_LOGS = 100; // Augmentation significative du nombre de logs conservés
 String logs[MAX_LOGS];
 int logIndex = 0;
 
@@ -104,28 +103,32 @@ void calibrerGyro()
   biaisGyroZ = somme / N;
 }
 
-// Calcule les distances des deux roues en fonction du déplacement demandé
+// Calcule les distances des deux roues en fonction du déplacement demandé et met à jour la position du robot
 WheelDistances calculerDistancesRoues(float deltaRobotX, float deltaRobotY) {
   WheelDistances distances;
   distances.left = deltaRobotY + (LARGEUR_ROBOT / LONGUEUR_ROBOT) * deltaRobotX;
   distances.right = deltaRobotY - (LARGEUR_ROBOT / LONGUEUR_ROBOT) * deltaRobotX;  
 
-  // Calcul de l'angle relatif basé sur la différence entre les roues
+  // Calcul de l'angle relatif basé sur la différence des distances des roues
   float deltaRoues = distances.left - distances.right;
   float angleRelatif = atan(deltaRoues / LARGEUR_ROBOT);
   
-  addLog("Angle robot actuel: " + String(RobotTheta * 180.0 / PI, 1) + "°");
+  addLog("[calculerDistancesRoues] Robot theta avant: " + String(RobotTheta * 180.0 / PI, 1) + "°");
+  
+
+  RobotX += deltaRobotX;
+  RobotY += deltaRobotY;
+  addLog("[calculerDistancesRoues] Nouvelle position robot: X=" + String(RobotX, 1) + " cm, Y=" + String(RobotY, 1) + " cm"); 
+  
+  // Mise à jour de l'angle du robot
   RobotTheta += angleRelatif;
   
   // Normaliser l'angle entre -PI et PI
   while (RobotTheta > PI) RobotTheta -= 2*PI;
   while (RobotTheta < -PI) RobotTheta += 2*PI;
   
-  addLog("Angle relatif calculé: " + String(angleRelatif * 180.0 / PI, 1) + "°");
-  addLog("Nouvel angle robot: " + String(RobotTheta * 180.0 / PI, 1) + "°");
-  
-  // Note: On ne peut pas mettre à jour RobotX et RobotY ici car nous n'avons pas
-  // les coordonnées absolues, seulement les déplacements relatifs au robot
+  addLog("[calculerDistancesRoues] Angle relatif calculé: " + String(angleRelatif * 180.0 / PI, 1) + "°");
+  addLog("[calculerDistancesRoues] Nouvel angle robot: " + String(RobotTheta * 180.0 / PI, 1) + "°");
   
   return distances;
 }
@@ -133,10 +136,10 @@ WheelDistances calculerDistancesRoues(float deltaRobotX, float deltaRobotY) {
 // Fonction pour convertir les coordonnées absolues en coordonnées relatives au robot
 // Utilise une transformation en coordonnées cylindriques/polaires
 Point convertAbsoluteToRobotCoordinates(float deltaAbsoluteX, float deltaAbsoluteY) {
-  addLog("convert Absolute To Robot Coordinates");
+  addLog("[convertCoords] Début de la conversion de coordonnées absolues en relatives");
   // Vérifier si le déplacement demandé est trop petit
   if (abs(deltaAbsoluteX) < 0.001 && abs(deltaAbsoluteY) < 0.001) {
-    addLog("Déplacement trop petit, évitement de division par zéro");
+    addLog("[convertCoords] Déplacement trop petit, évitement de division par zéro");
     return Point(0, 0);
   }
   
@@ -153,9 +156,9 @@ Point convertAbsoluteToRobotCoordinates(float deltaAbsoluteX, float deltaAbsolut
   
   // Afficher les valeurs pour débogage
 
-  addLog("Absolue (" + String(deltaAbsoluteX, 2) + "," + String(deltaAbsoluteY, 2) + ") -> " +
+  addLog("[convertCoords] Absolue (" + String(deltaAbsoluteX, 2) + "," + String(deltaAbsoluteY, 2) + ") -> " +
          "Distance=" + String(distance, 2) + "cm, Angle=" + String(angle * 180.0 / PI, 1) + "°");
-  addLog("Angle relatif: " + String(angleRelatif * 180.0 / PI, 1) + "° -> Robot (" + 
+  addLog("[convertCoords] Angle relatif: " + String(angleRelatif * 180.0 / PI, 1) + "° -> Robot (" + 
          String(deltaRobotX, 2) + "," + String(deltaRobotY, 2) + ")");
          
   // Retourner un Point contenant les coordonnées relatives au robot
@@ -179,10 +182,20 @@ String getAllLogs() {
   String allLogs = "";
   int count = 0;
   
-  // Parcourir les logs à partir du plus récent
+  // Trouver le plus ancien log (non vide)
+  int startIdx = logIndex;
   for (int i = 0; i < MAX_LOGS; i++) {
-    int idx = (logIndex - 1 - i + MAX_LOGS) % MAX_LOGS;
-    if (logs[idx].length() > 0) {
+    int idx = (logIndex + i) % MAX_LOGS;
+    if (logs[idx].length() == 0) {
+      startIdx = (idx + 1) % MAX_LOGS;
+      break;
+    }
+  }
+  
+  // Parcourir les logs à partir du plus ancien vers le plus récent
+  for (int i = 0; i < MAX_LOGS; i++) {
+    int idx = (startIdx + i) % MAX_LOGS;
+    if (logs[idx].length() > 0 && idx != logIndex) {
       allLogs += logs[idx] + "<br>";
       count++;
     }
@@ -196,11 +209,12 @@ bool directionAvantGauche = true; // true = avant, false = arrière
 bool directionAvantDroite = true; // true = avant, false = arrière
 
 void demarer(float deltaX, float deltaY)
+addLog("[demarer]", deltaX, deltaY);
 //cette fonction fonctionne
 {
   // Vérifier si les valeurs sont zéro
   if (abs(deltaX) < 0.01 && abs(deltaY) < 0.01) {
-    addLog("Valeurs trop petites, pas de mouvement");
+    addLog("[demarer] Valeurs trop petites, pas de mouvement");
     return;
   }
 
@@ -211,7 +225,7 @@ void demarer(float deltaX, float deltaY)
   
   // Vérifier que les distances ne sont pas aberrantes
   if (abs(distance_en_cm_roue_gauche) > 50 || abs(distance_en_cm_roue_droite) > 50) {
-    addLog("ATTENTION: Distances calculées anormalement grandes, limitation à 20cm");
+    addLog("[demarer] ATTENTION: Distances calculées anormalement grandes, limitation à 20cm");
     if (distance_en_cm_roue_gauche > 50) distance_en_cm_roue_gauche = 20;
     if (distance_en_cm_roue_gauche < -50) distance_en_cm_roue_gauche = -20;
     if (distance_en_cm_roue_droite > 50) distance_en_cm_roue_droite = 20;
@@ -227,13 +241,13 @@ void demarer(float deltaX, float deltaY)
   seuilImpulsionsRoueDroite = abs(distance_en_cm_roue_droite * IMPULSIONS_PAR_CM);
   
   // Enregistrer les valeurs dans les logs avec plus de détails
-  String logMsg = "Commande reçue: DX=" + String(deltaX, 2) + 
+  String logMsg = "[demarer] Commande reçue: DX=" + String(deltaX, 2) + 
                   ", DY=" + String(deltaY, 2) + 
                   ", Distance Gauche=" + String(distance_en_cm_roue_gauche, 2) + " cm" +
                   ", Distance Droite=" + String(distance_en_cm_roue_droite, 2) + " cm" + 
                   ", Seuil G=" + String(seuilImpulsionsRoueGauche) + 
                   ", Seuil D=" + String(seuilImpulsionsRoueDroite);
-  addLog(logMsg);
+  addLog("[demarer] " + logMsg);
   
   // Réinitialiser les compteurs
   countLeft = 0;
@@ -242,7 +256,7 @@ void demarer(float deltaX, float deltaY)
   // Activer le mouvement
   correctionActive = true;
   deplacementFait = false;
-  addLog("Début du mouvement");
+  addLog("[demarer] Début du mouvement");
 } 
 
 bool avancerCorrige() {
@@ -266,15 +280,15 @@ bool avancerCorrige() {
   int correctionGauche = Kp * erreurGauche;
   int correctionDroite = Kp * erreurDroite;
 
-  int pwmD = constrain(80 + correctionDroite, 80, 110);
-  int pwmG = constrain(80 + correctionGauche, 80, 110);
+  int pwmD = constrain(PWM_MIN + correctionDroite,PWM_MIN , PWM_MAX);
+  int pwmG = constrain(PWM_MIN + correctionGauche, PWM_MIN, PWM_MAX);
 
   analogWrite(EN_D, pwmD);
   analogWrite(EN_G, pwmG);
 
   bool fini = (countLeft >= seuilImpulsionsRoueGauche) && (countRight >= seuilImpulsionsRoueDroite);
   if (fini) {
-    addLog("Déplacement terminé");
+    addLog("[avancerCorrige] Déplacement terminé");
   }
   return fini;
 }
@@ -283,8 +297,8 @@ void setup()
 {
   Serial.begin(115200);
   delay(1000);
-  addLog("Drawbot démarré");
-  addLog("Position initiale: X=0.0, Y=0.0, Theta=0.0°");
+  addLog("[setup] Drawbot démarré");
+  addLog("[setup] Position initiale: X=0.0, Y=0.0, Theta=0.0°");
 
   Wire.begin();
   if (imu.begin() != 0) {
@@ -305,7 +319,7 @@ void setup()
   WiFi.softAP(ssid, password);
   server.begin();
   String ipAddress = WiFi.softAPIP().toString();
-  addLog("WiFi AP démarré - IP: " + ipAddress);
+  addLog("[setup] WiFi AP démarré - IP: " + ipAddress);
 }
 
 void loop() {
@@ -335,10 +349,10 @@ void loop() {
       // Vérifier si la requête contient "GET /?dx=" et le paramètre de soumission
       if (request.indexOf("GET /?dx=") != -1 && posSubmit != -1) {
         isFormSubmit = true;
-        addLog("Formulaire soumis");
+        addLog("[wifi] Formulaire recu");
       } else if (request.indexOf("GET /?dx=") != -1) {
         // C'est un rechargement de page avec les paramètres dans l'URL
-        addLog("Recharge de page détectée, mouvement ignoré");
+        addLog("[wifi] Recharge de page détectée, mouvement ignoré");
       }
       
       if (posX != -1 && posY != -1 && isFormSubmit) {
@@ -349,36 +363,31 @@ void loop() {
           String typeValue = request.substring(posType + 5, request.indexOf('&', posType + 5));
           if (typeValue == "robot") {
             isAbsoluteCoords = false;
-            addLog("Type de coordonnées: relatives au robot");
+            addLog("[wifi] Type de coordonnées: relatives au robot");
           } else {
-            addLog("Type de coordonnées: absolues");
+            addLog("[wifi] Type de coordonnées: absolues");
           }
         } else {
-          addLog("Type non spécifié, utilisation des coordonnées absolues par défaut");
+          addLog("[wifi] Type non spécifié, utilisation des coordonnées absolues par défaut");
         }
         float dx = request.substring(posX + 3, request.indexOf('&', posX)).toFloat();
         float dy = request.substring(posY + 3).toFloat();
-        addLog("Valeurs reçues: dx=" + String(dx) + ", dy=" + String(dy));
-        
-        // Mettre à jour les valeurs stockées
-        deltaX_wifi = dx;
-        deltaY_wifi = dy;
+        addLog("[wifi] Valeurs reçues: dx=" + String(dx) + ", dy=" + String(dy));
         
         if (isAbsoluteCoords) {
           // Convertir les coordonnées absolues en coordonnées relatives au robot
+          addLog("[wifi] Conversion de coordonnées absolues vers robot");
           Point robotCoord = convertAbsoluteToRobotCoordinates(dx, dy);
-          addLog("Conversion de coordonnées absolues vers robot");
-          
           // Démarrer le mouvement avec les coordonnées relatives
           demarer(robotCoord.x, robotCoord.y);
         } else {
           // Utiliser directement les coordonnées relatives au robot
-          addLog("Utilisation directe des coordonnées relatives au robot");
+          addLog("[wifi] Utilisation directe des coordonnées relatives au robot");
           demarer(dx, dy);
         }
       } else {
         // Si c'est juste un chargement de page sans soumission
-        addLog("Page chargée sans commande");
+        addLog("[wifi] Page chargée sans commande");
       }
 
       String html = "<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Drawbot WiFi</title>";
@@ -446,9 +455,9 @@ void loop() {
       correctionActive = false;
       deplacementFait = true;
       
-      addLog("Mouvement terminé - Robot arrêté");
-      addLog("=== POSITION ABSOLUE DU ROBOT ===");
-      addLog("X: " + String(RobotX, 2) + " cm | Y: " + String(RobotY, 2) + " cm | Orientation: " + String(RobotTheta * 180.0 / PI, 1) + "°");
+      addLog("[position] Mouvement terminé - Robot arrêté");
+      addLog("[position] abasolue X: " + String(RobotX, 2) + " cm | Y: " + String(RobotY, 2) + " cm | Orientation: " + String(RobotTheta * 180.0 / PI, 1) + "°");
     }
   }
+  addLog("[Loop] fin de loop");
 }
