@@ -104,14 +104,6 @@ void calibrerGyro()
   biaisGyroZ = somme / N;
 }
 
-float calculerTheta(float deltaX, float deltaY) {
-  // Protection contre division par zéro
-  if (deltaY == 0) {
-    return (deltaX >= 0) ? PI/2 : -PI/2;
-  }
-  return atan2(deltaX, deltaY);
-}
-
 // Calcule les distances des deux roues en fonction du déplacement demandé
 WheelDistances calculerDistancesRoues(float deltaRobotX, float deltaRobotY) {
   WheelDistances distances;
