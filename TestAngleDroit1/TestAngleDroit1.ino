@@ -46,6 +46,11 @@ float distance_en_cm_roue_droite = 0;
 float deltaX_wifi = 0;
 float deltaY_wifi = 0;
 
+/* ===== POSITION DU ROBOT ===== */
+float RobotX = 0.0;      // Position X du robot en cm
+float RobotY = 0.0;      // Position Y du robot en cm
+float RobotTheta = 0.0;  // Orientation du robot en radians
+
 /* ===== LOGS ===== */
 const int MAX_LOGS = 20;
 String logs[MAX_LOGS];
@@ -148,6 +153,39 @@ String getAllLogs() {
 bool directionAvantGauche = true; // true = avant, false = arrière
 bool directionAvantDroite = true; // true = avant, false = arrière
 
+// Fonction pour mettre à jour la position du robot après un déplacement
+void updateRobotPosition(float deltaX, float deltaY) {
+  // Si le déplacement est seulement en X (rotation)
+  if (abs(deltaY) < 0.05 && abs(deltaX) > 0.05) {
+    // Estimer le changement d'angle (en radians)
+    float deltaTheta = atan2(deltaX, DIST_STYLO_CM);
+    RobotTheta += deltaTheta;
+    // Normaliser l'angle entre -PI et PI
+    while (RobotTheta > PI) RobotTheta -= 2*PI;
+    while (RobotTheta < -PI) RobotTheta += 2*PI;
+    return;
+  }
+  
+  // Si le déplacement est seulement en Y (ligne droite)
+  if (abs(deltaX) < 0.05 && abs(deltaY) > 0.05) {
+    RobotX += deltaY * sin(RobotTheta);
+    RobotY += deltaY * cos(RobotTheta);
+    return;
+  }
+  
+  // Pour un déplacement combiné
+  float deltaTheta = atan2(deltaX, deltaY);
+  RobotTheta += deltaTheta;
+  // Normaliser l'angle entre -PI et PI
+  while (RobotTheta > PI) RobotTheta -= 2*PI;
+  while (RobotTheta < -PI) RobotTheta += 2*PI;
+  
+  // Calculer la distance parcourue
+  float distance = sqrt(deltaX*deltaX + deltaY*deltaY);
+  RobotX += distance * sin(RobotTheta);
+  RobotY += distance * cos(RobotTheta);
+}
+
 void demarer(float deltaX, float deltaY)
 {
   // Vérifier si les valeurs sont zéro
@@ -248,6 +286,7 @@ void setup()
   Serial.begin(115200);
   delay(1000);
   addLog("Drawbot démarré");
+  addLog("Position initiale: X=0.0, Y=0.0, Theta=0.0°");
 
   Wire.begin();
   if (imu.begin() != 0) {
@@ -330,6 +369,10 @@ void loop() {
     html += "</script>";
     html += "</head><body>";
     html += "<h1>Drawbot WiFi</h1>";
+  html += "<div style='background:#fff;padding:10px;border-radius:10px;margin-bottom:15px;'><strong>Position: </strong>";
+  html += "X: " + String(RobotX, 1) + " cm, ";
+  html += "Y: " + String(RobotY, 1) + " cm, ";
+  html += "Angle: " + String(RobotTheta * 180.0 / PI, 1) + "° </div>";
     html += "<form method='GET'>";
     html += "<h2>Commande</h2>";
     html += "deltaX (cm): <input type='number' name='dx' step='0.1' value='" + String(deltaX_wifi) + "'><br>";
@@ -356,7 +399,12 @@ void loop() {
       arreter();
       correctionActive = false;
       deplacementFait = true;
+      
+      // Mettre à jour la position du robot après le déplacement
+      updateRobotPosition(deltaX_wifi, deltaY_wifi);
+      
       addLog("Mouvement terminé - Robot arrêté");
+      addLog("Position actuelle: X=" + String(RobotX, 1) + ", Y=" + String(RobotY, 1) + ", Theta=" + String(RobotTheta * 180.0 / PI, 1) + "°");
     }
   }
 }
