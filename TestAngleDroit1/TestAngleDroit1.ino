@@ -109,12 +109,31 @@ WheelDistances calculerDistancesRoues(float deltaRobotX, float deltaRobotY) {
   WheelDistances distances;
   distances.left = deltaRobotY + (LARGEUR_ROBOT / LONGUEUR_ROBOT) * deltaRobotX;
   distances.right = deltaRobotY - (LARGEUR_ROBOT / LONGUEUR_ROBOT) * deltaRobotX;  
+
+  // Calcul de l'angle relatif basé sur la différence entre les roues
+  float deltaRoues = distances.left - distances.right;
+  float angleRelatif = atan(deltaRoues / LARGEUR_ROBOT);
+  
+  addLog("Angle robot actuel: " + String(RobotTheta * 180.0 / PI, 1) + "°");
+  RobotTheta += angleRelatif;
+  
+  // Normaliser l'angle entre -PI et PI
+  while (RobotTheta > PI) RobotTheta -= 2*PI;
+  while (RobotTheta < -PI) RobotTheta += 2*PI;
+  
+  addLog("Angle relatif calculé: " + String(angleRelatif * 180.0 / PI, 1) + "°");
+  addLog("Nouvel angle robot: " + String(RobotTheta * 180.0 / PI, 1) + "°");
+  
+  // Note: On ne peut pas mettre à jour RobotX et RobotY ici car nous n'avons pas
+  // les coordonnées absolues, seulement les déplacements relatifs au robot
+  
   return distances;
 }
 
 // Fonction pour convertir les coordonnées absolues en coordonnées relatives au robot
 // Utilise une transformation en coordonnées cylindriques/polaires
 Point convertAbsoluteToRobotCoordinates(float deltaAbsoluteX, float deltaAbsoluteY) {
+  addLog("convert Absolute To Robot Coordinates");
   // Vérifier si le déplacement demandé est trop petit
   if (abs(deltaAbsoluteX) < 0.001 && abs(deltaAbsoluteY) < 0.001) {
     addLog("Déplacement trop petit, évitement de division par zéro");
@@ -129,11 +148,11 @@ Point convertAbsoluteToRobotCoordinates(float deltaAbsoluteX, float deltaAbsolut
   float angleRelatif = angle - RobotTheta;
   
   // 3. Reconvertir en coordonnées cartésiennes relatives au robot
-  float deltaRobotX = distance * sin(angleRelatif); // X dans le repère du robot correspond à un déplacement latéral
-  float deltaRobotY = distance * cos(angleRelatif); // Y dans le repère du robot correspond à un déplacement avant
+  float deltaRobotX = distance * cos(angleRelatif); // X dans le repère du robot correspond à un déplacement latéral
+  float deltaRobotY = distance * sin(angleRelatif); // Y dans le repère du robot correspond à un déplacement avant
   
   // Afficher les valeurs pour débogage
-  addLog("Conversion en coordonnées cylindriques :");
+
   addLog("Absolue (" + String(deltaAbsoluteX, 2) + "," + String(deltaAbsoluteY, 2) + ") -> " +
          "Distance=" + String(distance, 2) + "cm, Angle=" + String(angle * 180.0 / PI, 1) + "°");
   addLog("Angle relatif: " + String(angleRelatif * 180.0 / PI, 1) + "° -> Robot (" + 
@@ -176,40 +195,8 @@ String getAllLogs() {
 bool directionAvantGauche = true; // true = avant, false = arrière
 bool directionAvantDroite = true; // true = avant, false = arrière
 
-// Fonction pour mettre à jour la position du robot après un déplacement
-void updateRobotPosition(float deltaX, float deltaY) {
-  // Si le déplacement est seulement en X (rotation)
-  if (abs(deltaY) < 0.05 && abs(deltaX) > 0.05) {
-    // Estimer le changement d'angle (en radians)
-    float deltaTheta = atan2(deltaX, DIST_STYLO_CM);
-    RobotTheta += deltaTheta;
-    // Normaliser l'angle entre -PI et PI
-    while (RobotTheta > PI) RobotTheta -= 2*PI;
-    while (RobotTheta < -PI) RobotTheta += 2*PI;
-    return;
-  }
-  
-  // Si le déplacement est seulement en Y (ligne droite)
-  if (abs(deltaX) < 0.05 && abs(deltaY) > 0.05) {
-    RobotX += deltaY * sin(RobotTheta);
-    RobotY += deltaY * cos(RobotTheta);
-    return;
-  }
-  
-  // Pour un déplacement combiné
-  float deltaTheta = atan2(deltaX, deltaY);
-  RobotTheta += deltaTheta;
-  // Normaliser l'angle entre -PI et PI
-  while (RobotTheta > PI) RobotTheta -= 2*PI;
-  while (RobotTheta < -PI) RobotTheta += 2*PI;
-  
-  // Calculer la distance parcourue
-  float distance = sqrt(deltaX*deltaX + deltaY*deltaY);
-  RobotX += distance * sin(RobotTheta);
-  RobotY += distance * cos(RobotTheta);
-}
-
 void demarer(float deltaX, float deltaY)
+//cette fonction fonctionne
 {
   // Vérifier si les valeurs sont zéro
   if (abs(deltaX) < 0.01 && abs(deltaY) < 0.01) {
@@ -257,23 +244,6 @@ void demarer(float deltaX, float deltaY)
   deplacementFait = false;
   addLog("Début du mouvement");
 } 
-
-
-/**void avancerCorrige() {
-  digitalWrite(IN_1_D, HIGH); digitalWrite(IN_2_D, LOW);
-  digitalWrite(IN_1_G, LOW);  digitalWrite(IN_2_G, HIGH);
-  int erreur = countRight - countLeft;
-  float Kp = 4.5;
-  int correction = Kp * erreur;
-  long moyenne = (countLeft + countRight) / 2;
-  long reste = seuilImpulsions - moyenne;
-  int pwmBase = constrain(map(reste, 0, seuilImpulsions, basePWM_D, 110), basePWM_D, 110);
-  int pwmD = constrain(pwmBase + correction, 70, 255);
-  int pwmG = constrain(pwmBase - correction, 70, 255);
-  analogWrite(EN_D, pwmD);
-  analogWrite(EN_G, pwmG);
-}**/
-
 
 bool avancerCorrige() {
   // Configurer la direction des moteurs en fonction des valeurs calculées
@@ -475,9 +445,6 @@ void loop() {
       arreter();
       correctionActive = false;
       deplacementFait = true;
-      
-      // Mettre à jour la position du robot après le déplacement
-      updateRobotPosition(deltaX_wifi, deltaY_wifi);
       
       addLog("Mouvement terminé - Robot arrêté");
       addLog("=== POSITION ABSOLUE DU ROBOT ===");
