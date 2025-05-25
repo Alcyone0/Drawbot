@@ -46,6 +46,18 @@ float distance_en_cm_roue_droite = 0;
 float deltaX_wifi = 0;
 float deltaY_wifi = 0;
 
+/* ===== STRUCTURES ===== */
+struct Point {
+  float x;
+  float y;
+  
+  // Constructeur par défaut
+  Point() : x(0), y(0) {}
+  
+  // Constructeur avec paramètres
+  Point(float _x, float _y) : x(_x), y(_y) {}
+};
+
 /* ===== POSITION DU ROBOT ===== */
 float RobotX = 0.0;      // Position X du robot en cm
 float RobotY = 0.0;      // Position Y du robot en cm
@@ -118,6 +130,29 @@ float calculerDeltaRoueDroiteY(float deltaRobotX, float deltaRobotY) {
   // Pour les déplacements combinés, utiliser la formule approximée
   float deltaTheta = deltaRobotX / deltaRobotY; // Approximation pour petits angles
   return deltaRobotY - (LARGEUR_ROBOT / 2.0) * deltaTheta;
+}
+
+// Fonction pour convertir les coordonnées absolues en coordonnées relatives au robot
+Point convertAbsoluteToRobotCoordinates(float deltaAbsoluteX, float deltaAbsoluteY) {
+  // Calculer les coordonnées cibles absolues
+  float targetAbsoluteX = RobotX + deltaAbsoluteX;
+  float targetAbsoluteY = RobotY + deltaAbsoluteY;
+  
+  // Calculer le vecteur entre la position actuelle et la cible
+  float vectorX = targetAbsoluteX - RobotX;
+  float vectorY = targetAbsoluteY - RobotY;
+  
+  // Appliquer une rotation inverse à l'angle actuel du robot
+  // Cette formule transforme les coordonnées absolues en coordonnées relatives au repère du robot
+  float deltaRobotX = vectorX * cos(-RobotTheta) + vectorY * sin(-RobotTheta);
+  float deltaRobotY = -vectorX * sin(-RobotTheta) + vectorY * cos(-RobotTheta);
+  
+  // Afficher les valeurs pour débogage
+  addLog("Conversion: Absolue (" + String(deltaAbsoluteX, 2) + "," + String(deltaAbsoluteY, 2) + ") -> Robot (" + 
+         String(deltaRobotX, 2) + "," + String(deltaRobotY, 2) + ")");
+         
+  // Retourner un Point contenant les coordonnées relatives
+  return Point(deltaRobotX, deltaRobotY);
 }
 
 void addLog(String message) {
@@ -324,6 +359,7 @@ void loop() {
 
     int posX = request.indexOf("dx=");
     int posY = request.indexOf("dy=");
+    int posType = request.indexOf("type=");
     
     // Vérifier si c'est une vraie requête de formulaire avec des paramètres
     bool isFormSubmit = false;
@@ -335,6 +371,20 @@ void loop() {
     }
     
     if (posX != -1 && posY != -1 && isFormSubmit) {
+      // Déterminer le type de coordonnées (absolu ou robot)
+      bool isAbsoluteCoords = true; // Par défaut, on considère les coordonnées comme absolues
+      
+      if (posType != -1) {
+        String typeValue = request.substring(posType + 5, request.indexOf('&', posType + 5));
+        if (typeValue == "robot") {
+          isAbsoluteCoords = false;
+          addLog("Type de coordonnées: relatives au robot");
+        } else {
+          addLog("Type de coordonnées: absolues");
+        }
+      } else {
+        addLog("Type non spécifié, utilisation des coordonnées absolues par défaut");
+      }
       float dx = request.substring(posX + 3, request.indexOf('&', posX)).toFloat();
       float dy = request.substring(posY + 3).toFloat();
       addLog("Valeurs reçues: dx=" + String(dx) + ", dy=" + String(dy));
@@ -343,8 +393,18 @@ void loop() {
       deltaX_wifi = dx;
       deltaY_wifi = dy;
       
-      // Démarrer le mouvement uniquement si c'est une soumission de formulaire
-      demarer(dx, dy);
+      if (isAbsoluteCoords) {
+        // Convertir les coordonnées absolues en coordonnées relatives au robot
+        Point robotCoord = convertAbsoluteToRobotCoordinates(dx, dy);
+        addLog("Conversion de coordonnées absolues vers robot");
+        
+        // Démarrer le mouvement avec les coordonnées relatives
+        demarer(robotCoord.x, robotCoord.y);
+      } else {
+        // Utiliser directement les coordonnées relatives au robot
+        addLog("Utilisation directe des coordonnées relatives au robot");
+        demarer(dx, dy);
+      }
     } else {
       // Si c'est juste un chargement de page sans soumission
       addLog("Page chargée sans commande");
@@ -369,15 +429,29 @@ void loop() {
     html += "</script>";
     html += "</head><body>";
     html += "<h1>Drawbot WiFi</h1>";
-  html += "<div style='background:#fff;padding:10px;border-radius:10px;margin-bottom:15px;'><strong>Position: </strong>";
-  html += "X: " + String(RobotX, 1) + " cm, ";
-  html += "Y: " + String(RobotY, 1) + " cm, ";
-  html += "Angle: " + String(RobotTheta * 180.0 / PI, 1) + "° </div>";
-    html += "<form method='GET'>";
+    html += "<div style='background:#fff;padding:10px;border-radius:10px;margin-bottom:15px;'><strong>Position: </strong>";
+    html += "X: " + String(RobotX, 1) + " cm, ";
+    html += "Y: " + String(RobotY, 1) + " cm, ";
+    html += "Angle: " + String(RobotTheta * 180.0 / PI, 1) + "° </div>";
+    html += "<form action='/' method='get'>";
     html += "<h2>Commande</h2>";
-    html += "deltaX (cm): <input type='number' name='dx' step='0.1' value='" + String(deltaX_wifi) + "'><br>";
-    html += "deltaY (cm): <input type='number' name='dy' step='0.1' value='" + String(deltaY_wifi) + "'><br>";
-    html += "<input type='submit' value='Envoyer'></form>";
+    html += "<div class='input-group'>";
+    html += "<label for='dx'>Delta X (cm):</label>";
+    html += "<input type='number' step='0.1' name='dx' id='dx' value='" + String(deltaX_wifi) + "' required>";
+    html += "</div>";
+    html += "<div class='input-group'>";
+    html += "<label for='dy'>Delta Y (cm):</label>";
+    html += "<input type='number' step='0.1' name='dy' id='dy' value='" + String(deltaY_wifi) + "' required>";
+    html += "</div>";
+    html += "<div class='input-group'>";
+    html += "<label for='type'>Type de coordonnées:</label>";
+    html += "<select name='type' id='type'>";
+    html += "<option value='absolu' selected>Absolues</option>";
+    html += "<option value='robot'>Relatives au robot</option>";
+    html += "</select>";
+    html += "</div>";
+    html += "<input type='submit' value='Déplacer' onclick='return confirm(\"Lancer le déplacement ?\")'>";
+    html += "</form>";
     
     // Affichage des logs
     html += "<h2>Logs</h2>";
