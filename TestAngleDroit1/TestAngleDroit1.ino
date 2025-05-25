@@ -113,25 +113,33 @@ WheelDistances calculerDistancesRoues(float deltaRobotX, float deltaRobotY) {
 }
 
 // Fonction pour convertir les coordonnées absolues en coordonnées relatives au robot
+// Utilise une transformation en coordonnées cylindriques/polaires
 Point convertAbsoluteToRobotCoordinates(float deltaAbsoluteX, float deltaAbsoluteY) {
-  // Calculer les coordonnées cibles absolues
-  float targetAbsoluteX = RobotX + deltaAbsoluteX;
-  float targetAbsoluteY = RobotY + deltaAbsoluteY;
+  // Vérifier si le déplacement demandé est trop petit
+  if (abs(deltaAbsoluteX) < 0.001 && abs(deltaAbsoluteY) < 0.001) {
+    addLog("Déplacement trop petit, évitement de division par zéro");
+    return Point(0, 0);
+  }
   
-  // Calculer le vecteur entre la position actuelle et la cible
-  float vectorX = targetAbsoluteX - RobotX;
-  float vectorY = targetAbsoluteY - RobotY;
+  // 1. Convertir les coordonnées absolues en coordonnées polaires
+  float distance = sqrt(deltaAbsoluteX * deltaAbsoluteX + deltaAbsoluteY * deltaAbsoluteY);
+  float angle = atan2(deltaAbsoluteY, deltaAbsoluteX); // Angle par rapport à l'axe X
   
-  // Appliquer une rotation inverse à l'angle actuel du robot
-  // Cette formule transforme les coordonnées absolues en coordonnées relatives au repère du robot
-  float deltaRobotX = vectorX * cos(-RobotTheta) + vectorY * sin(-RobotTheta);
-  float deltaRobotY = -vectorX * sin(-RobotTheta) + vectorY * cos(-RobotTheta);
+  // 2. Ajuster l'angle en fonction de l'orientation du robot
+  float angleRelatif = angle - RobotTheta;
+  
+  // 3. Reconvertir en coordonnées cartésiennes relatives au robot
+  float deltaRobotX = distance * sin(angleRelatif); // X dans le repère du robot correspond à un déplacement latéral
+  float deltaRobotY = distance * cos(angleRelatif); // Y dans le repère du robot correspond à un déplacement avant
   
   // Afficher les valeurs pour débogage
-  addLog("Conversion: Absolue (" + String(deltaAbsoluteX, 2) + "," + String(deltaAbsoluteY, 2) + ") -> Robot (" + 
+  addLog("Conversion en coordonnées cylindriques :");
+  addLog("Absolue (" + String(deltaAbsoluteX, 2) + "," + String(deltaAbsoluteY, 2) + ") -> " +
+         "Distance=" + String(distance, 2) + "cm, Angle=" + String(angle * 180.0 / PI, 1) + "°");
+  addLog("Angle relatif: " + String(angleRelatif * 180.0 / PI, 1) + "° -> Robot (" + 
          String(deltaRobotX, 2) + "," + String(deltaRobotY, 2) + ")");
          
-  // Retourner un Point contenant les coordonnées relatives
+  // Retourner un Point contenant les coordonnées relatives au robot
   return Point(deltaRobotX, deltaRobotY);
 }
 
@@ -472,7 +480,8 @@ void loop() {
       updateRobotPosition(deltaX_wifi, deltaY_wifi);
       
       addLog("Mouvement terminé - Robot arrêté");
-      addLog("Position actuelle: X=" + String(RobotX, 1) + ", Y=" + String(RobotY, 1) + ", Theta=" + String(RobotTheta * 180.0 / PI, 1) + "°");
+      addLog("=== POSITION ABSOLUE DU ROBOT ===");
+      addLog("X: " + String(RobotX, 2) + " cm | Y: " + String(RobotY, 2) + " cm | Orientation: " + String(RobotTheta * 180.0 / PI, 1) + "°");
     }
   }
 }
