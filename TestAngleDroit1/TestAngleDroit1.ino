@@ -122,29 +122,71 @@ String getAllLogs() {
   return allLogs.length() > 0 ? allLogs : "Aucun log disponible";
 }
 
+// Variables globales pour stocker la direction des roues
+bool directionAvantGauche = true; // true = avant, false = arrière
+bool directionAvantDroite = true; // true = avant, false = arrière
+
 void demarer(float deltaX, float deltaY)
 {
+  // Vérifier si les valeurs sont zéro
+  if (abs(deltaX) < 0.01 && abs(deltaY) < 0.01) {
+    addLog("Valeurs trop petites, pas de mouvement");
+    return;
+  }
+
+  // Calculer les distances pour chaque roue
   distance_en_cm_roue_gauche = calculerDeltaRoueGaucheY(deltaX, deltaY);
   distance_en_cm_roue_droite = calculerDeltaRoueDroiteY(deltaX, deltaY);
   
-  // Enregistrer les valeurs dans les logs
-  String logMsg = "DX=" + String(deltaX) + 
+  // Vérifier que les distances ne sont pas aberrantes
+  if (abs(distance_en_cm_roue_gauche) > 50 || abs(distance_en_cm_roue_droite) > 50) {
+    addLog("ATTENTION: Distances calculées anormalement grandes, limitation à 20cm");
+    if (distance_en_cm_roue_gauche > 50) distance_en_cm_roue_gauche = 20;
+    if (distance_en_cm_roue_gauche < -50) distance_en_cm_roue_gauche = -20;
+    if (distance_en_cm_roue_droite > 50) distance_en_cm_roue_droite = 20;
+    if (distance_en_cm_roue_droite < -50) distance_en_cm_roue_droite = -20;
+  }
+  
+  // Déterminer la direction de chaque roue
+  directionAvantGauche = (distance_en_cm_roue_gauche >= 0);
+  directionAvantDroite = (distance_en_cm_roue_droite >= 0);
+  
+  // Calculer les seuils d'impulsions (toujours en valeur absolue)
+  seuilImpulsionsRoueGauche = abs(distance_en_cm_roue_gauche * IMPULSIONS_PAR_CM);
+  seuilImpulsionsRoueDroite = abs(distance_en_cm_roue_droite * IMPULSIONS_PAR_CM);
+  
+  // Enregistrer les valeurs dans les logs avec plus de détails
+  String logMsg = "Commande reçue: DX=" + String(deltaX) + 
                   ", DY=" + String(deltaY) + 
-                  ", Distance Gauche=" + String(distance_en_cm_roue_gauche) + 
-                  ", Distance Droite=" + String(distance_en_cm_roue_droite);
+                  ", Distance Gauche=" + String(distance_en_cm_roue_gauche) + " cm" +
+                  ", Distance Droite=" + String(distance_en_cm_roue_droite) + " cm" + 
+                  ", Seuil G=" + String(seuilImpulsionsRoueGauche) + 
+                  ", Seuil D=" + String(seuilImpulsionsRoueDroite);
   addLog(logMsg);
   
-  seuilImpulsionsRoueGauche = distance_en_cm_roue_gauche * IMPULSIONS_PAR_CM;
-  seuilImpulsionsRoueDroite = distance_en_cm_roue_droite * IMPULSIONS_PAR_CM;
+  // Réinitialiser les compteurs
   countLeft = 0;
   countRight = 0;
+  
+  // Activer le mouvement
   correctionActive = true;
   deplacementFait = false;
+  addLog("Début du mouvement");
 } 
 
 bool avancerCorrige() {
-  digitalWrite(IN_1_D, HIGH); digitalWrite(IN_2_D, LOW);
-  digitalWrite(IN_1_G, LOW);  digitalWrite(IN_2_G, HIGH);
+  // Configurer la direction des moteurs en fonction des valeurs calculées
+  if (directionAvantDroite) {
+    digitalWrite(IN_1_D, HIGH); digitalWrite(IN_2_D, LOW);
+  } else {
+    digitalWrite(IN_1_D, LOW); digitalWrite(IN_2_D, HIGH);
+  }
+  
+  if (directionAvantGauche) {
+    digitalWrite(IN_1_G, LOW); digitalWrite(IN_2_G, HIGH);
+  } else {
+    digitalWrite(IN_1_G, HIGH); digitalWrite(IN_2_G, LOW);
+  }
 
   float ratioG = (float)countLeft  / seuilImpulsionsRoueGauche;
   float ratioD = (float)countRight / seuilImpulsionsRoueDroite;
@@ -208,9 +250,9 @@ void setup()
 }
 
 void loop() {
-  // Assurer que le robot ne bouge pas au démarrage
-  if (!deplacementFait && !correctionActive) {
-    arreter();
+  // Assurer que le robot ne bouge pas au démarrage ou après un déplacement
+  if (deplacementFait && !correctionActive) {
+    arreter(); // S'assurer que le robot est bien arrêté
   }
   
   WiFiClient client = server.available();
@@ -221,12 +263,30 @@ void loop() {
 
     int posX = request.indexOf("dx=");
     int posY = request.indexOf("dy=");
-    if (posX != -1 && posY != -1) {
+    
+    // Vérifier si c'est une vraie requête de formulaire avec des paramètres
+    bool isFormSubmit = false;
+    
+    // Vérifier si la requête contient "GET /?dx=" pour s'assurer que c'est bien un envoi de formulaire
+    if (request.indexOf("GET /?dx=") != -1) {
+      isFormSubmit = true;
+      addLog("Formulaire soumis");
+    }
+    
+    if (posX != -1 && posY != -1 && isFormSubmit) {
       float dx = request.substring(posX + 3, request.indexOf('&', posX)).toFloat();
       float dy = request.substring(posY + 3).toFloat();
+      addLog("Valeurs reçues: dx=" + String(dx) + ", dy=" + String(dy));
+      
+      // Mettre à jour les valeurs stockées
       deltaX_wifi = dx;
       deltaY_wifi = dy;
+      
+      // Démarrer le mouvement uniquement si c'est une soumission de formulaire
       demarer(dx, dy);
+    } else {
+      // Si c'est juste un chargement de page sans soumission
+      addLog("Page chargée sans commande");
     }
 
     String html = "<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Drawbot WiFi</title>";
@@ -240,7 +300,12 @@ void loop() {
     html += ".log-entry{font-family:monospace;font-size:0.9em;margin:3px 0;border-bottom:1px solid #eee;padding-bottom:3px;}";
     html += "h2{color:#333;margin-top:25px;}";
     html += "</style>";
-    // Pas de rafraîchissement automatique
+    // Ajouter un script JavaScript pour confirmer avant de soumettre le formulaire
+    html += "<script>";
+    html += "document.querySelector('form').onsubmit = function() {";
+    html += "  return confirm('Démarrer le mouvement avec ces valeurs?');";
+    html += "};";
+    html += "</script>";
     html += "</head><body>";
     html += "<h1>Drawbot WiFi</h1>";
     html += "<form method='GET'>";
@@ -262,12 +327,14 @@ void loop() {
     client.stop();
   }
 
+  // Vérifier si un mouvement est en cours
   if (correctionActive && !deplacementFait) {
     bool fini = avancerCorrige();
     if (fini) {
       arreter();
       correctionActive = false;
       deplacementFait = true;
+      addLog("Mouvement terminé - Robot arrêté");
     }
   }
 }
