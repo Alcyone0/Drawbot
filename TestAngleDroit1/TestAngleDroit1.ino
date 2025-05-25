@@ -435,6 +435,23 @@ void loop() {
       html += "<input type='submit' value='Déplacer'>";
       html += "</form>";
       
+      // Ajouter les boutons directionnels pour déplacement rapide de 0,1 cm
+      html += "<div style='margin-top:20px; margin-bottom:20px;'>";
+      html += "<h2>Déplacement rapide</h2>";
+      html += "<p>Déplacement absolu de 0,1 cm</p>";
+      html += "<div style='display:grid; grid-template-columns:1fr 1fr 1fr; max-width:180px; margin:0 auto; gap:5px;'>";
+      html += "<div></div>";
+      html += "<a href='/?dx=0&dy=0.1&type=absolu&submit=1' style='background:#4CAF50; color:white; padding:10px; border-radius:5px; text-decoration:none;'>&#8593;</a>"; // Flèche vers le haut (Y+)
+      html += "<div></div>";
+      html += "<a href='/?dx=-0.1&dy=0&type=absolu&submit=1' style='background:#4CAF50; color:white; padding:10px; border-radius:5px; text-decoration:none;'>&#8592;</a>"; // Flèche vers la gauche (X-)
+      html += "<div style='background:#ddd; color:#666; padding:5px; border-radius:5px;'>+0,1</div>"; // Centre
+      html += "<a href='/?dx=0.1&dy=0&type=absolu&submit=1' style='background:#4CAF50; color:white; padding:10px; border-radius:5px; text-decoration:none;'>&#8594;</a>"; // Flèche vers la droite (X+)
+      html += "<div></div>";
+      html += "<a href='/?dx=0&dy=-0.1&type=absolu&submit=1' style='background:#4CAF50; color:white; padding:10px; border-radius:5px; text-decoration:none;'>&#8595;</a>"; // Flèche vers le bas (Y-)
+      html += "<div></div>";
+      html += "</div>"; // Fin de la grille
+      html += "</div>"; // Fin du conteneur des boutons directionnels
+      
       // Affichage des logs
       html += "<h2>Logs</h2>";
       html += "<div class='log-container'>" + getAllLogs() + "</div>";
