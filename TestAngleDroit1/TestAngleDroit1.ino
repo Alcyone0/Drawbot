@@ -48,8 +48,15 @@ float distance_en_cm_roue_droite = 0;
 float deltaX_wifi = 0;
 float deltaY_wifi = 0;
 
+/* ===== VARIABLES POUR SÉQUENCE AUTOMATIQUE ===== */
+bool sequenceEnCours = false;
+int etapeSequence = 0;
+const int ETAPES_SEQUENCE_MAX = 30; // 10 pas à droite + 10 pas en haut + 10 pas à droite
+bool executerProchainMouvement = true;
+
 /* ===== PROTOTYPES DE FONCTIONS ===== */
 void demarer(float deltaX, float deltaY); // Déclaration anticipée
+void executerSequenceAutomatique(); // Déclaration pour la séquence automatique
 
 /* ===== STRUCTURES ===== */
 struct DeltaXY {
@@ -282,6 +289,56 @@ void demarer(float deltaX, float deltaY) {
   addLog("[demarer] Début du mouvement");
 } 
 
+// Fonction pour exécuter une séquence automatique de mouvements formant un carré
+void executerSequenceAutomatique() {
+  // Si la séquence n'est pas déjà en cours, l'initialiser
+  if (!sequenceEnCours) {
+    addLog("[sequence] Début de la séquence automatique");
+    sequenceEnCours = true;
+    etapeSequence = 0;
+    executerProchainMouvement = true;
+  }
+  
+  // Si nous sommes dans une séquence et qu'il faut exécuter le prochain mouvement
+  if (sequenceEnCours && executerProchainMouvement && etapeSequence < ETAPES_SEQUENCE_MAX) {
+    float dx = 0.0;
+    float dy = 0.0;
+    
+    // Déterminer la direction du mouvement en fonction de l'étape
+    if (etapeSequence < 10) {
+      // 10 premiers pas : vers la droite (X+)
+      dx = 0.1;
+      dy = 0.0;
+      addLog("[sequence] Étape " + String(etapeSequence+1) + "/30 : Déplacement à droite");
+    } else if (etapeSequence < 20) {
+      // 10 pas suivants : vers le haut (Y+)
+      dx = 0.0;
+      dy = 0.1;
+      addLog("[sequence] Étape " + String(etapeSequence+1) + "/30 : Déplacement en haut");
+    } else {
+      // 10 derniers pas : vers la droite (X+)
+      dx = 0.1;
+      dy = 0.0;
+      addLog("[sequence] Étape " + String(etapeSequence+1) + "/30 : Déplacement à droite");
+    }
+    
+    // Convertir les coordonnées absolues en coordonnées relatives au robot
+    DeltaXY robotCoord = convertAbsoluteToRobotCoordinates(dx, dy);
+    
+    // Lancer le mouvement
+    demarer(robotCoord.x, robotCoord.y);
+    
+    // Indiquer qu'il faut attendre la fin du mouvement avant le prochain
+    executerProchainMouvement = false;
+  }
+  
+  // Si nous avons terminé toutes les étapes
+  if (etapeSequence >= ETAPES_SEQUENCE_MAX && sequenceEnCours) {
+    sequenceEnCours = false;
+    addLog("[sequence] Séquence automatique terminée");
+  }
+}
+
 bool avancerCorrige() {
   // Configurer la direction des moteurs en fonction des valeurs calculées
   if (directionAvantDroite) {
@@ -369,11 +426,14 @@ void loop() {
       // Nouveau: vérifier le paramètre de soumission explicite
       int posSubmit = request.indexOf("submit=1");
       
-      // Vérifier si la requête contient "GET /?dx=" et le paramètre de soumission
-      if (request.indexOf("GET /?dx=") != -1 && posSubmit != -1) {
+      // Vérifier si la requête contient "GET /?" et le paramètre de soumission
+      if (request.indexOf("GET /?sequence=") != -1 && posSubmit != -1) {
         isFormSubmit = true;
-        addLog("[wifi] Formulaire recu");
-      } else if (request.indexOf("GET /?dx=") != -1) {
+        addLog("[wifi] Formulaire de séquence recu");
+      } else if (request.indexOf("GET /?dx=") != -1 && posSubmit != -1) {
+        isFormSubmit = true;
+        addLog("[wifi] Formulaire de mouvement recu");
+      } else if (request.indexOf("GET /?dx=") != -1 || request.indexOf("GET /?sequence=") != -1) {
         // C'est un rechargement de page avec les paramètres dans l'URL
         addLog("[wifi] Recharge de page détectée, mouvement ignoré");
       }
@@ -400,7 +460,7 @@ void loop() {
         if (isAbsoluteCoords) {
           // Convertir les coordonnées absolues en coordonnées relatives au robot
           addLog("[wifi] Conversion de coordonnées absolues vers robot");
-          Point robotCoord = convertAbsoluteToRobotCoordinates(dx, dy);
+          DeltaXY robotCoord = convertAbsoluteToRobotCoordinates(dx, dy);
           // Démarrer le mouvement avec les coordonnées relatives
           demarer(robotCoord.x, robotCoord.y);
         } else {
@@ -409,8 +469,30 @@ void loop() {
           demarer(dx, dy);
         }
       } else {
-        // Si c'est juste un chargement de page sans soumission
-        addLog("[wifi] Page chargée sans commande");
+        // Vérifier si c'est une demande pour lancer la séquence automatique
+        int posSequence = request.indexOf("sequence=1");
+        if (posSequence != -1) {
+          addLog("[wifi] Détection paramètre sequence=1 à la position " + String(posSequence));
+          if (isFormSubmit) {
+            addLog("[wifi] Demande de démarrage de la séquence automatique confirmée");
+            // Démarrer la séquence si le robot n'est pas déjà en mouvement
+            if (deplacementFait && !sequenceEnCours) {
+              sequenceEnCours = true;
+              etapeSequence = 0;
+              executerProchainMouvement = true;
+              addLog("[wifi] Séquence automatique lancée - variables: sequenceEnCours=" + String(sequenceEnCours) + ", etapeSequence=" + String(etapeSequence));
+              // Exécuter immédiatement la première étape
+              executerSequenceAutomatique();
+            } else {
+              addLog("[wifi] Impossible de démarrer la séquence, robot occupé - deplacementFait=" + String(deplacementFait) + ", sequenceEnCours=" + String(sequenceEnCours));
+            }
+          } else {
+            addLog("[wifi] Paramètre sequence=1 détecté mais formulaire non soumis");
+          }
+        } else {
+          // Si c'est juste un chargement de page sans soumission
+          addLog("[wifi] Page chargée sans commande");
+        }
       }
 
       String html = "<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Drawbot WiFi</title>";
@@ -473,6 +555,14 @@ void loop() {
       html += "</div>"; // Fin de la grille
       html += "</div>"; // Fin du conteneur des boutons directionnels
       
+      // Ajouter le bouton pour la séquence automatique
+      html += "<div style='margin-top:20px; margin-bottom:20px;'>";
+      html += "<h2>Séquence Automatique</h2>";
+      html += "<p>Dessiner un carré : 10 pas à droite, 10 pas en haut, 10 pas à droite</p>";
+      html += "<a href='/?sequence=1&submit=1' style='background:#FF5722; color:white; padding:15px 30px; border-radius:5px; text-decoration:none; display:inline-block; margin:10px; font-weight:bold;'>Lancer la séquence</a>";
+      html += sequenceEnCours ? "<p><strong>Séquence en cours : Étape " + String(etapeSequence) + "/" + String(ETAPES_SEQUENCE_MAX) + "</strong></p>" : "";
+      html += "</div>"; // Fin du conteneur pour la séquence automatique
+      
       // Affichage des logs
       html += "<h2>Logs</h2>";
       html += "<div class='log-container'>" + getAllLogs() + "</div>";
@@ -497,6 +587,19 @@ void loop() {
       
       addLog("[position] Mouvement terminé - Robot arrêté");
       addLog("[position] abasolue X: " + String(RobotX, 2) + " cm | Y: " + String(RobotY, 2) + " cm | Orientation: " + String(RobotTheta * 180.0 / PI, 1) + "°");
+      
+      // Si nous sommes dans une séquence automatique, préparer l'étape suivante
+      if (sequenceEnCours) {
+        etapeSequence++;
+        executerProchainMouvement = true;
+        // Ajouter un court délai entre les mouvements
+        delay(200);
+      }
     }
+  }
+  
+  // Si une séquence automatique est en cours, continuer son exécution
+  if (sequenceEnCours && deplacementFait) {
+    executerSequenceAutomatique();
   }
 }
