@@ -11,6 +11,8 @@ float biaisGyroZ = 0.0;
 const char* ssid = "Drawbot_WIFI";
 const char* password = "12345678";
 WiFiServer server(80);
+const char* COMPILE_DATE = __DATE__;
+const char* COMPILE_TIME = __TIME__;
 
 /* ===== MOTEURS ===== */
 #define IN_1_D 19
@@ -34,8 +36,9 @@ bool deplacementFait = true; // Set to true initially to prevent movement until 
 const float IMPULSIONS_PAR_CM = 34.0;
 const int   PWM_ROTATION = 80;
 const int   PWM_MARCHE   = 80;
-const float DIST_STYLO_CM = 6.5;
-const float LARGEUR_ROBOT = 8.0;
+const float DIST_STYLO_CM = 13.0;
+const float LARGEUR_ROBOT = 8.5;
+const float LONGUEUR_ROBOT = 13.0; // Distance entre l'axe des roues et le stylo
 
 /* ===== VARIABLES INTERNES ===== */
 const int basePWM_D = 80;
@@ -56,6 +59,17 @@ struct Point {
   
   // Constructeur avec paramètres
   Point(float _x, float _y) : x(_x), y(_y) {}
+};
+
+struct WheelDistances {
+  float left;   // Distance pour la roue gauche en cm
+  float right;  // Distance pour la roue droite en cm
+  
+  // Constructeur par défaut
+  WheelDistances() : left(0), right(0) {}
+  
+  // Constructeur avec paramètres
+  WheelDistances(float _left, float _right) : left(_left), right(_right) {};
 };
 
 /* ===== POSITION DU ROBOT ===== */
@@ -98,38 +112,12 @@ float calculerTheta(float deltaX, float deltaY) {
   return atan2(deltaX, deltaY);
 }
 
-// Calcul simplifié pour le déplacement de la roue gauche
-float calculerDeltaRoueGaucheY(float deltaRobotX, float deltaRobotY) {
-  // Pour une rotation pure (quand deltaY = 0)
-  if (abs(deltaRobotY) < 0.05) {
-    return deltaRobotX * (LARGEUR_ROBOT / 2.0) / DIST_STYLO_CM;
-  }
-  
-  // Pour un mouvement en ligne droite (quand deltaX = 0)
-  if (abs(deltaRobotX) < 0.05) {
-    return deltaRobotY;
-  }
-  
-  // Pour les déplacements combinés, utiliser la formule approximée
-  float deltaTheta = deltaRobotX / deltaRobotY; // Approximation pour petits angles
-  return deltaRobotY + (LARGEUR_ROBOT / 2.0) * deltaTheta;
-}
-
-// Calcul simplifié pour le déplacement de la roue droite
-float calculerDeltaRoueDroiteY(float deltaRobotX, float deltaRobotY) {
-  // Pour une rotation pure (quand deltaY = 0)
-  if (abs(deltaRobotY) < 0.05) {
-    return -deltaRobotX * (LARGEUR_ROBOT / 2.0) / DIST_STYLO_CM;
-  }
-  
-  // Pour un mouvement en ligne droite (quand deltaX = 0)
-  if (abs(deltaRobotX) < 0.05) {
-    return deltaRobotY;
-  }
-  
-  // Pour les déplacements combinés, utiliser la formule approximée
-  float deltaTheta = deltaRobotX / deltaRobotY; // Approximation pour petits angles
-  return deltaRobotY - (LARGEUR_ROBOT / 2.0) * deltaTheta;
+// Calcule les distances des deux roues en fonction du déplacement demandé
+WheelDistances calculerDistancesRoues(float deltaRobotX, float deltaRobotY) {
+  WheelDistances distances;
+  distances.left = deltaRobotY + (LARGEUR_ROBOT / LONGUEUR_ROBOT) * deltaRobotX;
+  distances.right = deltaRobotY - (LARGEUR_ROBOT / LONGUEUR_ROBOT) * deltaRobotX;  
+  return distances;
 }
 
 // Fonction pour convertir les coordonnées absolues en coordonnées relatives au robot
@@ -229,9 +217,10 @@ void demarer(float deltaX, float deltaY)
     return;
   }
 
-  // Calculer les distances pour chaque roue
-  distance_en_cm_roue_gauche = calculerDeltaRoueGaucheY(deltaX, deltaY);
-  distance_en_cm_roue_droite = calculerDeltaRoueDroiteY(deltaX, deltaY);
+  // Calculer les distances pour chaque roue avec la nouvelle fonction
+  WheelDistances distances = calculerDistancesRoues(deltaX, deltaY);
+  distance_en_cm_roue_gauche = distances.left;
+  distance_en_cm_roue_droite = distances.right;
   
   // Vérifier que les distances ne sont pas aberrantes
   if (abs(distance_en_cm_roue_gauche) > 50 || abs(distance_en_cm_roue_droite) > 50) {
@@ -269,6 +258,23 @@ void demarer(float deltaX, float deltaY)
   addLog("Début du mouvement");
 } 
 
+
+/**void avancerCorrige() {
+  digitalWrite(IN_1_D, HIGH); digitalWrite(IN_2_D, LOW);
+  digitalWrite(IN_1_G, LOW);  digitalWrite(IN_2_G, HIGH);
+  int erreur = countRight - countLeft;
+  float Kp = 4.5;
+  int correction = Kp * erreur;
+  long moyenne = (countLeft + countRight) / 2;
+  long reste = seuilImpulsions - moyenne;
+  int pwmBase = constrain(map(reste, 0, seuilImpulsions, basePWM_D, 110), basePWM_D, 110);
+  int pwmD = constrain(pwmBase + correction, 70, 255);
+  int pwmG = constrain(pwmBase - correction, 70, 255);
+  analogWrite(EN_D, pwmD);
+  analogWrite(EN_G, pwmG);
+}**/
+
+
 bool avancerCorrige() {
   // Configurer la direction des moteurs en fonction des valeurs calculées
   if (directionAvantDroite) {
@@ -282,32 +288,19 @@ bool avancerCorrige() {
   } else {
     digitalWrite(IN_1_G, HIGH); digitalWrite(IN_2_G, LOW);
   }
+  
+  int erreurGauche = seuilImpulsionsRoueGauche - countLeft;
+  int erreurDroite = seuilImpulsionsRoueDroite - countRight;
 
-  float ratioG = (float)countLeft  / seuilImpulsionsRoueGauche;
-  float ratioD = (float)countRight / seuilImpulsionsRoueDroite;
+  float Kp = 10;
+  int correctionGauche = Kp * erreurGauche;
+  int correctionDroite = Kp * erreurDroite;
 
-  float erreurRatio = ratioD - ratioG;
-  float Kp = 10.0;
-  int correction = Kp * erreurRatio;
-
-  float ratioMoyen = (ratioG + ratioD) / 2.0;
-  float resteRatio = 1.0 - ratioMoyen;
-  int pwmBase = constrain(basePWM_D + resteRatio * 30, basePWM_D, 110);
-
-  int pwmD = constrain(pwmBase + correction, 70, 255);
-  int pwmG = constrain(pwmBase - correction, 70, 255);
+  int pwmD = constrain(80 + correctionDroite, 80, 110);
+  int pwmG = constrain(80 + correctionGauche, 80, 110);
 
   analogWrite(EN_D, pwmD);
   analogWrite(EN_G, pwmG);
-  
-  // Ajouter un log périodique (tous les 500ms) pour ne pas saturer
-  static unsigned long lastLogTime = 0;
-  if (millis() - lastLogTime > 500) {
-    addLog("Progression: G=" + String(countLeft) + "/" + String(seuilImpulsionsRoueGauche) + 
-           " D=" + String(countRight) + "/" + String(seuilImpulsionsRoueDroite) + 
-           " (" + String(int(ratioMoyen*100)) + "%)");
-    lastLogTime = millis();
-  }
 
   bool fini = (countLeft >= seuilImpulsionsRoueGauche) && (countRight >= seuilImpulsionsRoueDroite);
   if (fini) {
@@ -366,10 +359,16 @@ void loop() {
       // Vérifier si c'est une vraie requête de formulaire avec des paramètres
       bool isFormSubmit = false;
       
-      // Vérifier si la requête contient "GET /?dx=" pour s'assurer que c'est bien un envoi de formulaire
-      if (request.indexOf("GET /?dx=") != -1) {
+      // Nouveau: vérifier le paramètre de soumission explicite
+      int posSubmit = request.indexOf("submit=1");
+      
+      // Vérifier si la requête contient "GET /?dx=" et le paramètre de soumission
+      if (request.indexOf("GET /?dx=") != -1 && posSubmit != -1) {
         isFormSubmit = true;
         addLog("Formulaire soumis");
+      } else if (request.indexOf("GET /?dx=") != -1) {
+        // C'est un rechargement de page avec les paramètres dans l'URL
+        addLog("Recharge de page détectée, mouvement ignoré");
       }
       
       if (posX != -1 && posY != -1 && isFormSubmit) {
@@ -426,6 +425,9 @@ void loop() {
 
       html += "</head><body>";
       html += "<h1>Drawbot WiFi</h1>";
+      html += "<div style='background:#f8f8f8;padding:5px;border-radius:5px;margin-bottom:10px;font-size:0.8em;text-align:right;'>";
+      html += "Compilé le " + String(COMPILE_DATE) + " à " + String(COMPILE_TIME);
+      html += "</div>";
       html += "<div style='background:#fff;padding:10px;border-radius:10px;margin-bottom:15px;'><strong>Position: </strong>";
       html += "X: " + String(RobotX, 1) + " cm, ";
       html += "Y: " + String(RobotY, 1) + " cm, ";
@@ -447,6 +449,8 @@ void loop() {
       html += "<option value='robot'>Relatives au robot</option>";
       html += "</select>";
       html += "</div>";
+      // Ajouter un champ caché pour indiquer une soumission explicite du formulaire
+      html += "<input type='hidden' name='submit' value='1'>";
       html += "<input type='submit' value='Déplacer'>";
       html += "</form>";
       
