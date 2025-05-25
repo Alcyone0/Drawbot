@@ -48,6 +48,9 @@ float distance_en_cm_roue_droite = 0;
 float deltaX_wifi = 0;
 float deltaY_wifi = 0;
 
+/* ===== PROTOTYPES DE FONCTIONS ===== */
+void demarer(float deltaX, float deltaY); // Déclaration anticipée
+
 /* ===== STRUCTURES ===== */
 struct Point {
   float x;
@@ -208,10 +211,9 @@ String getAllLogs() {
 bool directionAvantGauche = true; // true = avant, false = arrière
 bool directionAvantDroite = true; // true = avant, false = arrière
 
-void demarer(float deltaX, float deltaY)
-addLog("[demarer]", deltaX, deltaY);
-//cette fonction fonctionne
-{
+// Fonction pour démarrer le mouvement du robot
+void demarer(float deltaX, float deltaY) {
+  addLog("[demarer] DX=" + String(deltaX) + ", DY=" + String(deltaY));
   // Vérifier si les valeurs sont zéro
   if (abs(deltaX) < 0.01 && abs(deltaY) < 0.01) {
     addLog("[demarer] Valeurs trop petites, pas de mouvement");
@@ -459,5 +461,4 @@ void loop() {
       addLog("[position] abasolue X: " + String(RobotX, 2) + " cm | Y: " + String(RobotY, 2) + " cm | Orientation: " + String(RobotTheta * 180.0 / PI, 1) + "°");
     }
   }
-  addLog("[Loop] fin de loop");
 }
