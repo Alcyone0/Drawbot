@@ -287,7 +287,7 @@ bool avancerCorrige() {
   float ratioD = (float)countRight / seuilImpulsionsRoueDroite;
 
   float erreurRatio = ratioD - ratioG;
-  float Kp = 60.0;
+  float Kp = 10.0;
   int correction = Kp * erreurRatio;
 
   float ratioMoyen = (ratioG + ratioD) / 2.0;
@@ -351,119 +351,117 @@ void loop() {
     arreter(); // S'assurer que le robot est bien arrêté
   }
   
-  WiFiClient client = server.available();
-  if (client) {
-    while (!client.available()) delay(1);
-    String request = client.readStringUntil('\r');
-    client.flush();
+  // Ne traiter les requêtes WiFi que si le robot n'est pas en train de se déplacer
+  if (deplacementFait) {
+    WiFiClient client = server.available();
+    if (client) {
+      while (!client.available()) delay(1);
+      String request = client.readStringUntil('\r');
+      client.flush();
 
-    int posX = request.indexOf("dx=");
-    int posY = request.indexOf("dy=");
-    int posType = request.indexOf("type=");
-    
-    // Vérifier si c'est une vraie requête de formulaire avec des paramètres
-    bool isFormSubmit = false;
-    
-    // Vérifier si la requête contient "GET /?dx=" pour s'assurer que c'est bien un envoi de formulaire
-    if (request.indexOf("GET /?dx=") != -1) {
-      isFormSubmit = true;
-      addLog("Formulaire soumis");
-    }
-    
-    if (posX != -1 && posY != -1 && isFormSubmit) {
-      // Déterminer le type de coordonnées (absolu ou robot)
-      bool isAbsoluteCoords = true; // Par défaut, on considère les coordonnées comme absolues
+      int posX = request.indexOf("dx=");
+      int posY = request.indexOf("dy=");
+      int posType = request.indexOf("type=");
       
-      if (posType != -1) {
-        String typeValue = request.substring(posType + 5, request.indexOf('&', posType + 5));
-        if (typeValue == "robot") {
-          isAbsoluteCoords = false;
-          addLog("Type de coordonnées: relatives au robot");
+      // Vérifier si c'est une vraie requête de formulaire avec des paramètres
+      bool isFormSubmit = false;
+      
+      // Vérifier si la requête contient "GET /?dx=" pour s'assurer que c'est bien un envoi de formulaire
+      if (request.indexOf("GET /?dx=") != -1) {
+        isFormSubmit = true;
+        addLog("Formulaire soumis");
+      }
+      
+      if (posX != -1 && posY != -1 && isFormSubmit) {
+        // Déterminer le type de coordonnées (absolu ou robot)
+        bool isAbsoluteCoords = true; // Par défaut, on considère les coordonnées comme absolues
+        
+        if (posType != -1) {
+          String typeValue = request.substring(posType + 5, request.indexOf('&', posType + 5));
+          if (typeValue == "robot") {
+            isAbsoluteCoords = false;
+            addLog("Type de coordonnées: relatives au robot");
+          } else {
+            addLog("Type de coordonnées: absolues");
+          }
         } else {
-          addLog("Type de coordonnées: absolues");
+          addLog("Type non spécifié, utilisation des coordonnées absolues par défaut");
+        }
+        float dx = request.substring(posX + 3, request.indexOf('&', posX)).toFloat();
+        float dy = request.substring(posY + 3).toFloat();
+        addLog("Valeurs reçues: dx=" + String(dx) + ", dy=" + String(dy));
+        
+        // Mettre à jour les valeurs stockées
+        deltaX_wifi = dx;
+        deltaY_wifi = dy;
+        
+        if (isAbsoluteCoords) {
+          // Convertir les coordonnées absolues en coordonnées relatives au robot
+          Point robotCoord = convertAbsoluteToRobotCoordinates(dx, dy);
+          addLog("Conversion de coordonnées absolues vers robot");
+          
+          // Démarrer le mouvement avec les coordonnées relatives
+          demarer(robotCoord.x, robotCoord.y);
+        } else {
+          // Utiliser directement les coordonnées relatives au robot
+          addLog("Utilisation directe des coordonnées relatives au robot");
+          demarer(dx, dy);
         }
       } else {
-        addLog("Type non spécifié, utilisation des coordonnées absolues par défaut");
+        // Si c'est juste un chargement de page sans soumission
+        addLog("Page chargée sans commande");
       }
-      float dx = request.substring(posX + 3, request.indexOf('&', posX)).toFloat();
-      float dy = request.substring(posY + 3).toFloat();
-      addLog("Valeurs reçues: dx=" + String(dx) + ", dy=" + String(dy));
+
+      String html = "<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Drawbot WiFi</title>";
+      html += "<style>";
+      html += "body{font-family:Arial;text-align:center;background:#f2f2f2;padding:20px;}";
+      html += "form{background:#fff;padding:20px;border-radius:12px;box-shadow:0 0 10px #888;display:inline-block;margin-bottom:20px;width:80%;max-width:400px;}";
+      html += "input{padding:10px;margin:8px;border-radius:5px;width:80%;}";
+      html += "input[type=submit]{background:#4CAF50;color:white;border:none;cursor:pointer;}";
+      html += "input[type=submit]:hover{background:#45a049;}";
+      html += ".log-container{background:#fff;border-radius:12px;box-shadow:0 0 10px #888;padding:15px;margin:0 auto;width:90%;max-width:800px;text-align:left;max-height:400px;overflow-y:auto;}";
+      html += ".log-entry{font-family:monospace;font-size:0.9em;margin:3px 0;border-bottom:1px solid #eee;padding-bottom:3px;}";
+      html += "h2{color:#333;margin-top:25px;}";
+      html += "</style>";
+
+      html += "</head><body>";
+      html += "<h1>Drawbot WiFi</h1>";
+      html += "<div style='background:#fff;padding:10px;border-radius:10px;margin-bottom:15px;'><strong>Position: </strong>";
+      html += "X: " + String(RobotX, 1) + " cm, ";
+      html += "Y: " + String(RobotY, 1) + " cm, ";
+      html += "Angle: " + String(RobotTheta * 180.0 / PI, 1) + "° </div>";
+      html += "<form action='/' method='get'>";
+      html += "<h2>Commande</h2>";
+      html += "<div class='input-group'>";
+      html += "<label for='dx'>Delta X (cm):</label>";
+      html += "<input type='number' step='0.1' name='dx' id='dx' value='" + String(deltaX_wifi) + "' required>";
+      html += "</div>";
+      html += "<div class='input-group'>";
+      html += "<label for='dy'>Delta Y (cm):</label>";
+      html += "<input type='number' step='0.1' name='dy' id='dy' value='" + String(deltaY_wifi) + "' required>";
+      html += "</div>";
+      html += "<div class='input-group'>";
+      html += "<label for='type'>Type de coordonnées:</label>";
+      html += "<select name='type' id='type'>";
+      html += "<option value='absolu' selected>Absolues</option>";
+      html += "<option value='robot'>Relatives au robot</option>";
+      html += "</select>";
+      html += "</div>";
+      html += "<input type='submit' value='Déplacer'>";
+      html += "</form>";
       
-      // Mettre à jour les valeurs stockées
-      deltaX_wifi = dx;
-      deltaY_wifi = dy;
-      
-      if (isAbsoluteCoords) {
-        // Convertir les coordonnées absolues en coordonnées relatives au robot
-        Point robotCoord = convertAbsoluteToRobotCoordinates(dx, dy);
-        addLog("Conversion de coordonnées absolues vers robot");
-        
-        // Démarrer le mouvement avec les coordonnées relatives
-        demarer(robotCoord.x, robotCoord.y);
-      } else {
-        // Utiliser directement les coordonnées relatives au robot
-        addLog("Utilisation directe des coordonnées relatives au robot");
-        demarer(dx, dy);
-      }
-    } else {
-      // Si c'est juste un chargement de page sans soumission
-      addLog("Page chargée sans commande");
+      // Affichage des logs
+      html += "<h2>Logs</h2>";
+      html += "<div class='log-container'>" + getAllLogs() + "</div>";
+      html += "</body></html>";
+      client.println("HTTP/1.1 200 OK");
+      client.println("Content-Type: text/html");
+      client.println("Connection: close");
+      client.println();
+      client.println(html);
+      delay(1);
+      client.stop();
     }
-
-    String html = "<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Drawbot WiFi</title>";
-    html += "<style>";
-    html += "body{font-family:Arial;text-align:center;background:#f2f2f2;padding:20px;}";
-    html += "form{background:#fff;padding:20px;border-radius:12px;box-shadow:0 0 10px #888;display:inline-block;margin-bottom:20px;width:80%;max-width:400px;}";
-    html += "input{padding:10px;margin:8px;border-radius:5px;width:80%;}";
-    html += "input[type=submit]{background:#4CAF50;color:white;border:none;cursor:pointer;}";
-    html += "input[type=submit]:hover{background:#45a049;}";
-    html += ".log-container{background:#fff;border-radius:12px;box-shadow:0 0 10px #888;padding:15px;margin:0 auto;width:90%;max-width:800px;text-align:left;max-height:400px;overflow-y:auto;}";
-    html += ".log-entry{font-family:monospace;font-size:0.9em;margin:3px 0;border-bottom:1px solid #eee;padding-bottom:3px;}";
-    html += "h2{color:#333;margin-top:25px;}";
-    html += "</style>";
-    // Ajouter un script JavaScript pour confirmer avant de soumettre le formulaire
-    html += "<script>";
-    html += "document.querySelector('form').onsubmit = function() {";
-    html += "  return confirm('Démarrer le mouvement avec ces valeurs?');";
-    html += "};";
-    html += "</script>";
-    html += "</head><body>";
-    html += "<h1>Drawbot WiFi</h1>";
-    html += "<div style='background:#fff;padding:10px;border-radius:10px;margin-bottom:15px;'><strong>Position: </strong>";
-    html += "X: " + String(RobotX, 1) + " cm, ";
-    html += "Y: " + String(RobotY, 1) + " cm, ";
-    html += "Angle: " + String(RobotTheta * 180.0 / PI, 1) + "° </div>";
-    html += "<form action='/' method='get'>";
-    html += "<h2>Commande</h2>";
-    html += "<div class='input-group'>";
-    html += "<label for='dx'>Delta X (cm):</label>";
-    html += "<input type='number' step='0.1' name='dx' id='dx' value='" + String(deltaX_wifi) + "' required>";
-    html += "</div>";
-    html += "<div class='input-group'>";
-    html += "<label for='dy'>Delta Y (cm):</label>";
-    html += "<input type='number' step='0.1' name='dy' id='dy' value='" + String(deltaY_wifi) + "' required>";
-    html += "</div>";
-    html += "<div class='input-group'>";
-    html += "<label for='type'>Type de coordonnées:</label>";
-    html += "<select name='type' id='type'>";
-    html += "<option value='absolu' selected>Absolues</option>";
-    html += "<option value='robot'>Relatives au robot</option>";
-    html += "</select>";
-    html += "</div>";
-    html += "<input type='submit' value='Déplacer' onclick='return confirm(\"Lancer le déplacement ?\")'>";
-    html += "</form>";
-    
-    // Affichage des logs
-    html += "<h2>Logs</h2>";
-    html += "<div class='log-container'>";
-    html += getAllLogs();
-    html += "</div>";
-
-    client.println("HTTP/1.1 200 OK");
-    client.println("Content-type:text/html");
-    client.println();
-    client.println(html);
-    client.stop();
   }
 
   // Vérifier si un mouvement est en cours
