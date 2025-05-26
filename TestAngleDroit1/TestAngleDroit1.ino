@@ -391,6 +391,40 @@ void executerSequenceCercle() {
   }
 }
 
+// Fonction pour réinitialiser la position et l'orientation du robot
+void resetRobot() {
+  // Arrêter le robot et toute séquence en cours
+  arreter();
+  sequenceEnCours = false;
+  sequenceCercleEnCours = false;
+  deplacementFait = true;
+  correctionActive = false;
+  etapeSequence = 0;
+  etapeCercle = 0;
+  executerProchainMouvement = true;
+  executerProchainPointCercle = true;
+  
+  // Réinitialiser les seuils et les distances
+  seuilImpulsionsRoueGauche = 0;
+  seuilImpulsionsRoueDroite = 0;
+  distance_en_cm_roue_gauche = 0;
+  distance_en_cm_roue_droite = 0;
+  deltaX_wifi = 0;
+  deltaY_wifi = 0;
+  
+  // Réinitialiser les compteurs d'encodeurs
+  countLeft = 0;
+  countRight = 0;
+  
+  // Réinitialiser la position et l'orientation
+  RobotX = 0.0;
+  RobotY = 0.0;
+  RobotTheta = 0.0;
+  
+  addLog("[reset] Position et orientation réinitialisées à zéro");
+  addLog("[reset] X=0.0, Y=0.0, Theta=0.0°");
+}
+
 bool avancerCorrige() {
   // Configurer la direction des moteurs en fonction des valeurs calculées
   if (directionAvantDroite) {
@@ -448,16 +482,34 @@ void setup()
   attachInterrupt(digitalPinToInterrupt(encoderLeftA),  countLeftEncoder,  RISING);
   attachInterrupt(digitalPinToInterrupt(encoderRightA), countRightEncoder, RISING);
 
+  // S'assurer que les séquences sont désactivées au démarrage
+  sequenceEnCours = false;
+  sequenceCercleEnCours = false;
+  deplacementFait = true; // Pour éviter que le robot ne bouge au démarrage
+  
   WiFi.softAP(ssid, password);
   server.begin();
   String ipAddress = WiFi.softAPIP().toString();
   addLog("[setup] WiFi AP démarré - IP: " + ipAddress);
+  
+  // S'assurer que le robot est arrêté au démarrage
+  arreter();
 }
 
 void loop() {
-  // Assurer que le robot ne bouge pas au démarrage ou après un déplacement
+  // S'assurer que le robot ne bouge pas au démarrage ou après un déplacement
   if (deplacementFait && !correctionActive) {
     arreter(); // S'assurer que le robot est bien arrêté
+  }
+  
+  // Ne pas démarrer automatiquement de séquence lors du chargement de la page
+  static bool firstRun = true;
+  if (firstRun) {
+    sequenceEnCours = false;
+    sequenceCercleEnCours = false;
+    deplacementFait = true;
+    firstRun = false;
+    addLog("[loop] Premier démarrage, séquences désactivées");
   }
   
   // Ne traiter les requêtes WiFi que si le robot n'est pas en train de se déplacer
@@ -479,7 +531,10 @@ void loop() {
       int posSubmit = request.indexOf("submit=1");
       
       // Vérifier si la requête contient "GET /?" et le paramètre de soumission
-      if (request.indexOf("GET /?sequence=") != -1 && posSubmit != -1) {
+      if (request.indexOf("GET /?reset=") != -1 && posSubmit != -1) {
+        isFormSubmit = true;
+        addLog("[wifi] Formulaire de réinitialisation recu");
+      } else if (request.indexOf("GET /?sequence=") != -1 && posSubmit != -1) {
         isFormSubmit = true;
         addLog("[wifi] Formulaire de séquence carré recu");
       } else if (request.indexOf("GET /?cercle=") != -1 && posSubmit != -1) {
@@ -488,7 +543,7 @@ void loop() {
       } else if (request.indexOf("GET /?dx=") != -1 && posSubmit != -1) {
         isFormSubmit = true;
         addLog("[wifi] Formulaire de mouvement recu");
-      } else if (request.indexOf("GET /?dx=") != -1 || request.indexOf("GET /?sequence=") != -1 || request.indexOf("GET /?cercle=") != -1) {
+      } else if (request.indexOf("GET /?dx=") != -1 || request.indexOf("GET /?sequence=") != -1 || request.indexOf("GET /?cercle=") != -1 || request.indexOf("GET /?reset=") != -1) {
         // C'est un rechargement de page avec les paramètres dans l'URL
         addLog("[wifi] Recharge de page détectée, mouvement ignoré");
       }
@@ -524,11 +579,24 @@ void loop() {
           demarer(dx, dy);
         }
       } else {
-        // Vérifier si c'est une demande pour lancer la séquence automatique (carré ou cercle)
+        // Vérifier si c'est une demande pour lancer la séquence automatique (carré ou cercle) ou réinitialiser
         int posSequence = request.indexOf("sequence=1");
         int posCercle = request.indexOf("cercle=1");
+        int posReset = request.indexOf("reset=1");
         
-        if (posSequence != -1) {
+        if (posReset != -1) {
+          addLog("[wifi] Détection paramètre reset=1 à la position " + String(posReset));
+          if (isFormSubmit) {
+            addLog("[wifi] Demande de réinitialisation confirmée");
+            // Exécuter la fonction de réinitialisation
+            resetRobot();
+            
+            // Vérifier que la réinitialisation a bien fonctionné
+            addLog("[wifi] Vérification après réinitialisation: X=" + String(RobotX) + ", Y=" + String(RobotY) + ", Theta=" + String(RobotTheta));
+          } else {
+            addLog("[wifi] Paramètre reset=1 détecté mais formulaire non soumis");
+          }
+        } else if (posSequence != -1) {
           addLog("[wifi] Détection paramètre sequence=1 à la position " + String(posSequence));
           if (isFormSubmit) {
             addLog("[wifi] Demande de démarrage de la séquence automatique confirmée");
@@ -645,6 +713,14 @@ void loop() {
       html += "<a href='/?cercle=1&submit=1' style='background:#2196F3; color:white; padding:15px 30px; border-radius:5px; text-decoration:none; display:inline-block; margin:10px; font-weight:bold;'>Dessiner le cercle</a>";
       html += sequenceCercleEnCours ? "<p><strong>Cercle en cours : Point " + String(etapeCercle) + "/" + String(ETAPES_CERCLE_MAX) + "</strong></p>" : "";
       html += "</div>"; // Fin du conteneur pour la séquence cercle
+      
+      // Ajouter le bouton de réinitialisation (reset)
+      html += "<div style='margin-top:20px; margin-bottom:20px;'>";
+      html += "<h2>Réinitialisation</h2>";
+      html += "<p>Réinitialiser la position du robot à (0,0) et l'angle à 0°</p>";
+      html += "<a href='/?reset=1&submit=1' style='background:#F44336; color:white; padding:15px 30px; border-radius:5px; text-decoration:none; display:inline-block; margin:10px; font-weight:bold;'>Réinitialiser position</a>";
+      html += "<p><strong>Position actuelle: X=" + String(RobotX, 2) + " cm, Y=" + String(RobotY, 2) + " cm, Angle=" + String(RobotTheta * 180.0 / PI, 1) + "°</strong></p>";
+      html += "</div>"; // Fin du conteneur pour la réinitialisation
       
       // Affichage des logs
       html += "<h2>Logs</h2>";
