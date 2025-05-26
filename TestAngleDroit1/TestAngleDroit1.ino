@@ -47,6 +47,8 @@ float distance_en_cm_roue_gauche = 0;
 float distance_en_cm_roue_droite = 0;
 float deltaX_wifi = 0;
 float deltaY_wifi = 0;
+bool directionAvantGauche = true; // true = avant, false = arrière
+bool directionAvantDroite = true; // true = avant, false = arrière
 
 /* ===== VARIABLES POUR SÉQUENCE AUTOMATIQUE ===== */
 bool sequenceEnCours = false;
@@ -238,6 +240,83 @@ float calculTheta(float x, float y, float omega, float xt, float yt) {
   return theta_rad;
 }
 
+// Structure pour stocker les résultats du calcul de theta et des distances
+typedef struct {
+  float theta_deg;
+  float distance;
+  float distance_gauche;
+  float distance_droite;
+} ThetaEtDistances;
+
+// Déclaration anticipée de la fonction
+ThetaEtDistances calculerThetaEtDistance(float x, float y, float omega_deg, float xt, float yt);
+
+// Fonction pour calculer l'angle theta et les distances des roues
+// Version simplifiée pour une meilleure précision
+ThetaEtDistances calculerThetaEtDistance(float x, float y, float omega_deg, float xt, float yt) {
+  ThetaEtDistances result;
+  
+  // Vecteur vers la cible dans le repère absolu
+  float dx = xt - x;
+  float dy = yt - y;
+  
+  // Distance euclidienne jusqu'à la cible
+  result.distance = sqrt(dx*dx + dy*dy);
+  
+  if (result.distance < 0.01) {
+    // Si on est déjà sur la cible
+    result.theta_deg = 0.0;
+    result.distance_gauche = 0.0;
+    result.distance_droite = 0.0;
+    return result;
+  }
+  
+  // Angle cible dans le repère absolu
+  float target_angle = atan2(dy, dx);
+  
+  // Différence d'angle entre l'orientation actuelle et la cible
+  float omega_rad = omega_deg * PI / 180.0;
+  float delta_angle = target_angle - omega_rad;
+  
+  // Normaliser l'angle entre -PI et PI
+  while (delta_angle > PI) delta_angle -= 2*PI;
+  while (delta_angle < -PI) delta_angle += 2*PI;
+  
+  result.theta_deg = delta_angle * 180.0 / PI;  // Conversion en degrés
+  
+  // Calcul des distances des roues en utilisant une approche en deux temps
+  // 1. Rotation sur place pour s'orienter vers la cible
+  // 2. Déplacement en ligne droite vers la cible
+  
+  // Distance de rotation (arc de cercle)
+  float distance_rotation = abs(delta_angle) * (LARGEUR_ROBOT / 2.0);
+  
+  // Si l'angle est très petit, on se contente d'avancer tout droit
+  if (abs(delta_angle) < 0.01) {
+    result.distance_gauche = result.distance;
+    result.distance_droite = result.distance;
+  } else {
+    // Sinon, on calcule les distances pour chaque roue
+    if (delta_angle > 0) {
+      // Rotation vers la gauche
+      result.distance_gauche = -distance_rotation;
+      result.distance_droite = distance_rotation;
+    } else {
+      // Rotation vers la droite
+      result.distance_gauche = distance_rotation;
+      result.distance_droite = -distance_rotation;
+    }
+  }
+  
+  // Journalisation pour le débogage
+  addLog("[calculerThetaEtDistance] Theta: " + String(result.theta_deg, 2) + "°");
+  addLog("[calculerThetaEtDistance] Distance: " + String(result.distance, 2) + " cm");
+  addLog("[calculerThetaEtDistance] Roue G: " + String(result.distance_gauche, 2) + " cm");
+  addLog("[calculerThetaEtDistance] Roue D: " + String(result.distance_droite, 2) + " cm");
+  
+  return result;
+}
+
 // Fonction pour naviguer vers un point absolu sur la feuille (x, y)
 // Cette fonction calcule le déplacement nécessaire pour atteindre le point cible
 // depuis la position actuelle du robot, en tenant compte de son orientation
@@ -252,20 +331,36 @@ void naviguerVersPointAbsolu(float targetX, float targetY) {
     return;
   }
   
-  // Calculer l'angle theta entre l'orientation du robot et la direction vers le point cible
-  float theta = calculTheta(RobotX, RobotY, RobotTheta, targetX, targetY);
+  // Calculer l'angle et les distances nécessaires
+  ThetaEtDistances resultat = calculerThetaEtDistance(RobotX, RobotY, RobotTheta * 180.0 / PI, targetX, targetY);
   
-  // Convertir theta en degrés pour les logs
-  addLog("[navPoint] Angle theta calculé: " + String(theta * 180.0 / PI, 1) + "°");
+  // Mettre à jour les distances des roues
+  distance_en_cm_roue_gauche = resultat.distance_gauche;
+  distance_en_cm_roue_droite = resultat.distance_droite;
   
-  // Calculer le déplacement en coordonnées du robot
-  float dx = distance * cos(theta);
-  float dy = distance * sin(theta);
+  // Déterminer les directions des roues
+  directionAvantGauche = (distance_en_cm_roue_gauche >= 0);
+  directionAvantDroite = (distance_en_cm_roue_droite >= 0);
   
-  addLog("[navPoint] Déplacement relatif calculé: dx=" + String(dx, 2) + ", dy=" + String(dy, 2));
+  // Calculer les seuils d'impulsions (toujours en valeur absolue)
+  seuilImpulsionsRoueGauche = abs(distance_en_cm_roue_gauche * IMPULSIONS_PAR_CM);
+  seuilImpulsionsRoueDroite = abs(distance_en_cm_roue_droite * IMPULSIONS_PAR_CM);
   
-  // Exécuter le déplacement
-  demarer(dx, dy);
+  // Journalisation
+  addLog("[navPoint] Angle de rotation: " + String(resultat.theta_deg, 2) + "°");
+  addLog("[navPoint] Distance à parcourir: " + String(resultat.distance, 2) + " cm");
+  addLog("[navPoint] Distance roue G: " + String(distance_en_cm_roue_gauche, 2) + " cm");
+  addLog("[navPoint] Distance roue D: " + String(distance_en_cm_roue_droite, 2) + " cm");
+  
+  // Activer le mouvement
+  correctionActive = true;
+  deplacementFait = false;
+  
+  // Réinitialiser les compteurs
+  countLeft = 0;
+  countRight = 0;
+  
+  addLog("[navPoint] Début du mouvement vers la cible");
 }
 
 void addLog(String message) {
@@ -307,9 +402,6 @@ String getAllLogs() {
   return allLogs.length() > 0 ? allLogs : "Aucun log disponible";
 }
 
-// Variables globales pour stocker la direction des roues
-bool directionAvantGauche = true; // true = avant, false = arrière
-bool directionAvantDroite = true; // true = avant, false = arrière
 
 // Variables pour stocker les données du dernier mouvement
 float lastDeltaX = 0.0;
