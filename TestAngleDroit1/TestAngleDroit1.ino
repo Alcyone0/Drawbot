@@ -138,19 +138,33 @@ void calibrerGyro()
 // Calcule les distances des deux roues en fonction du déplacement demandé et met à jour la position du robot
 WheelDistances calculerDistancesRoues(float deltaRobotX, float deltaRobotY) {
   WheelDistances distances;
-  distances.left = deltaRobotY + (LARGEUR_ROBOT / LONGUEUR_ROBOT) * deltaRobotX;
-  distances.right = deltaRobotY - (LARGEUR_ROBOT / LONGUEUR_ROBOT) * deltaRobotX;  
+  distances.left = deltaRobotY + (LARGEUR_ROBOT / (LONGUEUR_ROBOT/2)) * deltaRobotX;
+  distances.right = deltaRobotY - (LARGEUR_ROBOT / (LONGUEUR_ROBOT/2)) * deltaRobotX;  
+
+  addLog("[calculerDistancesRoues] Distances roues: " + String(distances.left, 1) + " cm, " + String(distances.right, 1) + " cm");
+
+  return distances;
+}
+
+WheelDistances calculerNouvellePosition(float roueGauche, float roueDroite) {
+  WheelDistances distances;
+  distances.left = roueGauche;
+  distances.right = roueDroite;  
 
   // Calcul de l'angle relatif basé sur la différence des distances des roues
   float deltaRoues = distances.left - distances.right;
-  float angleRelatif = atan(deltaRoues / LARGEUR_ROBOT);
+  float angleRelatif = atan(deltaRoues / (LARGEUR_ROBOT/2));
   
-  addLog("[calculerDistancesRoues] Robot theta avant: " + String(RobotTheta * 180.0 / PI, 1) + "°");
+  addLog("[calculerNouvellePosition] Robot theta avant: " + String(RobotTheta * 180.0 / PI, 1) + "°");
   
-
-  RobotX += deltaRobotX;
-  RobotY += deltaRobotY;
-  addLog("[calculerDistancesRoues] Nouvelle position robot: X=" + String(RobotX, 1) + " cm, Y=" + String(RobotY, 1) + " cm"); 
+  // Calcul du déplacement moyen pour la position
+  float deltaMoyen = (roueGauche + roueDroite) / 2.0;
+  
+  // Mise à jour de la position du robot en fonction de son orientation
+  RobotX += deltaMoyen * cos(RobotTheta + angleRelatif/2.0);
+  RobotY += deltaMoyen * sin(RobotTheta + angleRelatif/2.0);
+  
+  addLog("[calculerNouvellePosition] Nouvelle position robot: X=" + String(RobotX, 1) + " cm, Y=" + String(RobotY, 1) + " cm"); 
   
   // Mise à jour de l'angle du robot
   RobotTheta += angleRelatif;
@@ -158,9 +172,6 @@ WheelDistances calculerDistancesRoues(float deltaRobotX, float deltaRobotY) {
   // Normaliser l'angle entre -PI et PI
   while (RobotTheta > PI) RobotTheta -= 2*PI;
   while (RobotTheta < -PI) RobotTheta += 2*PI;
-  
-  addLog("[calculerDistancesRoues] Angle relatif calculé: " + String(angleRelatif * 180.0 / PI, 1) + "°");
-  addLog("[calculerDistancesRoues] Nouvel angle robot: " + String(RobotTheta * 180.0 / PI, 1) + "°");
   
   return distances;
 }
@@ -295,6 +306,10 @@ void demarer(float deltaX, float deltaY) {
   correctionActive = true;
   deplacementFait = false;
   addLog("[demarer] Début du mouvement");
+  
+  // Calculer la nouvelle position du robot
+  calculerNouvellePosition(distances.left, distances.right);
+  addLog("[demarer] Nouvelle position robot: X=" + String(RobotX, 1) + " cm, Y=" + String(RobotY, 1) + " cm");
 } 
 
 // Fonction pour exécuter une séquence automatique de mouvements formant un carré
