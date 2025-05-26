@@ -54,9 +54,17 @@ int etapeSequence = 0;
 const int ETAPES_SEQUENCE_MAX = 30; // 10 pas à droite + 10 pas en haut + 10 pas à droite
 bool executerProchainMouvement = true;
 
+/* ===== VARIABLES POUR SÉQUENCE CERCLE ===== */
+bool sequenceCercleEnCours = false;
+int etapeCercle = 0;
+const int ETAPES_CERCLE_MAX = 100; // 100 points pour le cercle
+const float RAYON_CERCLE = 0.5; // Rayon du cercle en cm (diamètre 1cm)
+bool executerProchainPointCercle = true;
+
 /* ===== PROTOTYPES DE FONCTIONS ===== */
 void demarer(float deltaX, float deltaY); // Déclaration anticipée
 void executerSequenceAutomatique(); // Déclaration pour la séquence automatique
+void executerSequenceCercle(); // Déclaration pour la séquence de cercle
 
 /* ===== STRUCTURES ===== */
 struct DeltaXY {
@@ -339,6 +347,50 @@ void executerSequenceAutomatique() {
   }
 }
 
+// Fonction pour dessiner un cercle de rayon 4cm en 100 points
+void executerSequenceCercle() {
+  // Si la séquence n'est pas déjà en cours, l'initialiser
+  if (!sequenceCercleEnCours) {
+    addLog("[cercle] Début de la séquence cercle");
+    sequenceCercleEnCours = true;
+    etapeCercle = 0;
+    executerProchainPointCercle = true;
+  }
+  
+  // Si nous sommes dans une séquence cercle et qu'il faut exécuter le prochain mouvement
+  if (sequenceCercleEnCours && executerProchainPointCercle && etapeCercle < ETAPES_CERCLE_MAX) {
+    // Calculer l'angle en radians pour cette étape (de 0 à 2π)
+    float angle = 2.0 * PI * etapeCercle / ETAPES_CERCLE_MAX;
+    
+    // Calculer les coordonnées absolues du point du cercle (relatif à la position actuelle)
+    float dx = RAYON_CERCLE * cos(angle) - RAYON_CERCLE * cos(2.0 * PI * (etapeCercle - 1) / ETAPES_CERCLE_MAX);
+    float dy = RAYON_CERCLE * sin(angle) - RAYON_CERCLE * sin(2.0 * PI * (etapeCercle - 1) / ETAPES_CERCLE_MAX);
+    
+    // Pour le premier point, on se déplace juste au début du cercle sans calcul différentiel
+    if (etapeCercle == 0) {
+      dx = RAYON_CERCLE;
+      dy = 0.0;
+    }
+    
+    addLog("[cercle] Étape " + String(etapeCercle+1) + "/" + String(ETAPES_CERCLE_MAX) + " : Angle=" + String(angle * 180.0 / PI, 1) + "°, dx=" + String(dx, 3) + ", dy=" + String(dy, 3));
+    
+    // Convertir les coordonnées absolues en coordonnées relatives au robot
+    DeltaXY robotCoord = convertAbsoluteToRobotCoordinates(dx, dy);
+    
+    // Lancer le mouvement
+    demarer(robotCoord.x, robotCoord.y);
+    
+    // Indiquer qu'il faut attendre la fin du mouvement avant le prochain
+    executerProchainPointCercle = false;
+  }
+  
+  // Si nous avons terminé toutes les étapes
+  if (etapeCercle >= ETAPES_CERCLE_MAX && sequenceCercleEnCours) {
+    sequenceCercleEnCours = false;
+    addLog("[cercle] Séquence cercle terminée");
+  }
+}
+
 bool avancerCorrige() {
   // Configurer la direction des moteurs en fonction des valeurs calculées
   if (directionAvantDroite) {
@@ -429,11 +481,14 @@ void loop() {
       // Vérifier si la requête contient "GET /?" et le paramètre de soumission
       if (request.indexOf("GET /?sequence=") != -1 && posSubmit != -1) {
         isFormSubmit = true;
-        addLog("[wifi] Formulaire de séquence recu");
+        addLog("[wifi] Formulaire de séquence carré recu");
+      } else if (request.indexOf("GET /?cercle=") != -1 && posSubmit != -1) {
+        isFormSubmit = true;
+        addLog("[wifi] Formulaire de séquence cercle recu");
       } else if (request.indexOf("GET /?dx=") != -1 && posSubmit != -1) {
         isFormSubmit = true;
         addLog("[wifi] Formulaire de mouvement recu");
-      } else if (request.indexOf("GET /?dx=") != -1 || request.indexOf("GET /?sequence=") != -1) {
+      } else if (request.indexOf("GET /?dx=") != -1 || request.indexOf("GET /?sequence=") != -1 || request.indexOf("GET /?cercle=") != -1) {
         // C'est un rechargement de page avec les paramètres dans l'URL
         addLog("[wifi] Recharge de page détectée, mouvement ignoré");
       }
@@ -469,14 +524,16 @@ void loop() {
           demarer(dx, dy);
         }
       } else {
-        // Vérifier si c'est une demande pour lancer la séquence automatique
+        // Vérifier si c'est une demande pour lancer la séquence automatique (carré ou cercle)
         int posSequence = request.indexOf("sequence=1");
+        int posCercle = request.indexOf("cercle=1");
+        
         if (posSequence != -1) {
           addLog("[wifi] Détection paramètre sequence=1 à la position " + String(posSequence));
           if (isFormSubmit) {
             addLog("[wifi] Demande de démarrage de la séquence automatique confirmée");
             // Démarrer la séquence si le robot n'est pas déjà en mouvement
-            if (deplacementFait && !sequenceEnCours) {
+            if (deplacementFait && !sequenceEnCours && !sequenceCercleEnCours) {
               sequenceEnCours = true;
               etapeSequence = 0;
               executerProchainMouvement = true;
@@ -488,6 +545,24 @@ void loop() {
             }
           } else {
             addLog("[wifi] Paramètre sequence=1 détecté mais formulaire non soumis");
+          }
+        } else if (posCercle != -1) {
+          addLog("[wifi] Détection paramètre cercle=1 à la position " + String(posCercle));
+          if (isFormSubmit) {
+            addLog("[wifi] Demande de démarrage de la séquence cercle confirmée");
+            // Démarrer la séquence cercle si le robot n'est pas déjà en mouvement
+            if (deplacementFait && !sequenceCercleEnCours && !sequenceEnCours) {
+              sequenceCercleEnCours = true;
+              etapeCercle = 0;
+              executerProchainPointCercle = true;
+              addLog("[wifi] Séquence cercle lancée - variables: sequenceCercleEnCours=" + String(sequenceCercleEnCours) + ", etapeCercle=" + String(etapeCercle));
+              // Exécuter immédiatement la première étape
+              executerSequenceCercle();
+            } else {
+              addLog("[wifi] Impossible de démarrer la séquence cercle, robot occupé - deplacementFait=" + String(deplacementFait) + ", sequenceCercleEnCours=" + String(sequenceCercleEnCours));
+            }
+          } else {
+            addLog("[wifi] Paramètre cercle=1 détecté mais formulaire non soumis");
           }
         } else {
           // Si c'est juste un chargement de page sans soumission
@@ -555,13 +630,21 @@ void loop() {
       html += "</div>"; // Fin de la grille
       html += "</div>"; // Fin du conteneur des boutons directionnels
       
-      // Ajouter le bouton pour la séquence automatique
+      // Ajouter le bouton pour la séquence automatique (carré)
       html += "<div style='margin-top:20px; margin-bottom:20px;'>";
       html += "<h2>Séquence Automatique</h2>";
       html += "<p>Dessiner un carré : 10 pas à droite, 10 pas en haut, 10 pas à droite</p>";
       html += "<a href='/?sequence=1&submit=1' style='background:#FF5722; color:white; padding:15px 30px; border-radius:5px; text-decoration:none; display:inline-block; margin:10px; font-weight:bold;'>Lancer la séquence</a>";
       html += sequenceEnCours ? "<p><strong>Séquence en cours : Étape " + String(etapeSequence) + "/" + String(ETAPES_SEQUENCE_MAX) + "</strong></p>" : "";
       html += "</div>"; // Fin du conteneur pour la séquence automatique
+      
+      // Ajouter le bouton pour la séquence de cercle
+      html += "<div style='margin-top:20px; margin-bottom:20px;'>";
+      html += "<h2>Dessiner un Cercle</h2>";
+      html += "<p>Cercle de 1 cm de diamètre en 100 points</p>";
+      html += "<a href='/?cercle=1&submit=1' style='background:#2196F3; color:white; padding:15px 30px; border-radius:5px; text-decoration:none; display:inline-block; margin:10px; font-weight:bold;'>Dessiner le cercle</a>";
+      html += sequenceCercleEnCours ? "<p><strong>Cercle en cours : Point " + String(etapeCercle) + "/" + String(ETAPES_CERCLE_MAX) + "</strong></p>" : "";
+      html += "</div>"; // Fin du conteneur pour la séquence cercle
       
       // Affichage des logs
       html += "<h2>Logs</h2>";
@@ -595,11 +678,23 @@ void loop() {
         // Ajouter un court délai entre les mouvements
         delay(200);
       }
+      // Si nous sommes dans une séquence de cercle, préparer le point suivant
+      else if (sequenceCercleEnCours) {
+        etapeCercle++;
+        executerProchainPointCercle = true;
+        // Ajouter un court délai entre les mouvements
+        delay(200);
+      }
     }
   }
   
   // Si une séquence automatique est en cours, continuer son exécution
   if (sequenceEnCours && deplacementFait) {
     executerSequenceAutomatique();
+  }
+  
+  // Si une séquence de cercle est en cours, continuer son exécution
+  if (sequenceCercleEnCours && deplacementFait) {
+    executerSequenceCercle();
   }
 }
