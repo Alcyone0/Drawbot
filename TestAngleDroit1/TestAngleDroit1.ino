@@ -39,7 +39,7 @@ const float IMPULSIONS_PAR_CM = 34.0;
 const int   PWM_MIN = 80;
 const int   PWM_MAX = 110;
 const float DIST_STYLO_CM = 13.0;
-const float LARGEUR_ROBOT = 8.5;
+const float LARGEUR_ROBOT = 8.5/2;
 const float LONGUEUR_ROBOT = 13.0; // Distance entre l'axe des roues et le stylo
 
 /* ===== VARIABLES INTERNES ===== */
@@ -104,8 +104,8 @@ void calibrerGyro()
 // Calcule les distances des deux roues en fonction du déplacement demandé et met à jour la position du robot
 WheelDistances calculerDistancesRoues(DeltaXY robotRelativePoint) {
   WheelDistances distances;
-  distances.left = robotRelativePoint.y + (LARGEUR_ROBOT / (LONGUEUR_ROBOT/2)) * robotRelativePoint.x;
-  distances.right = robotRelativePoint.y - (LARGEUR_ROBOT / (LONGUEUR_ROBOT/2)) * robotRelativePoint.x;  
+  distances.left = robotRelativePoint.y + (LARGEUR_ROBOT / LONGUEUR_ROBOT) * robotRelativePoint.x;
+  distances.right = robotRelativePoint.y - (LARGEUR_ROBOT / LONGUEUR_ROBOT) * robotRelativePoint.x;  
 
   addLog("[calculerDistancesRoues] Distances roues: " + String(distances.left, 1) + " cm, " + String(distances.right, 1) + " cm");
 
@@ -118,7 +118,7 @@ RobotState calculerNouvellePosition(WheelDistances distances) {
   
   // Calcul de l'angle relatif basé sur la différence des distances des roues
   float deltaRoues = distances.left - distances.right;
-  float angleRelatif = atan(deltaRoues / (LARGEUR_ROBOT/2));
+  float angleRelatif = atan(deltaRoues / (LARGEUR_ROBOT));
   
   addLog("[calculerNouvellePosition] Robot theta avant: " + String(robotState.theta * 180.0 / PI, 1) + "°");
   
