@@ -2,6 +2,8 @@
 #include <WiFi.h>
 #include <SparkFunLSM6DS3.h>
 #include <math.h>
+#include "RobotStructures.h"
+#include "Sequences.h"
 
 /* ===== IMU ===== */
 LSM6DS3 imu(I2C_MODE, 0x6B);
@@ -67,41 +69,7 @@ void executerSequenceAutomatique(); // Déclaration pour la séquence automatiqu
 void executerSequenceCercle(); // Déclaration pour la séquence de cercle
 
 /* ===== STRUCTURES ===== */
-struct DeltaXY {
-  float x;
-  float y;
-  
-  // Constructeur par défaut
-  DeltaXY() : x(0), y(0) {}
-  
-  // Constructeur avec paramètres
-  DeltaXY(float _x, float _y) : x(_x), y(_y) {}
-};
-
-// Structure pour représenter la position et l'orientation du robot
-struct RobotState {
-  float x;
-  float y;
-  float theta;        // Orientation du robot en radians
-  
-  // Constructor
-  RobotState(float _x, float _y, float _theta) 
-    : x(_x), y(_y), theta(_theta) {}
-    
-  // Constructeur par défaut
-  RobotState() : x(0), y(0), theta(0) {}
-};
-
-struct WheelDistances {
-  float left;   // Distance pour la roue gauche en cm
-  float right;  // Distance pour la roue droite en cm
-  
-  // Constructeur par défaut
-  WheelDistances() : left(0), right(0) {}
-  
-  // Constructeur avec paramètres
-  WheelDistances(float _left, float _right) : left(_left), right(_right) {};
-};
+// Les structures ont été déplacées dans le fichier RobotStructures.h
 
 /* ===== POSITION DU ROBOT ===== */
 RobotState robotState;  // Position et orientation du robot
@@ -305,103 +273,7 @@ void demarer(float deltaX, float deltaY) {
   addLog("[demarer] Nouvelle position robot: X=" + String(robotState.x, 1) + " cm, Y=" + String(robotState.y, 1) + " cm");
 } 
 
-// Fonction pour exécuter une séquence automatique de mouvements formant un carré
-void executerSequenceAutomatique() {
-  // Si la séquence n'est pas déjà en cours, l'initialiser
-  if (!sequenceEnCours) {
-    addLog("[sequence] Début de la séquence automatique");
-    sequenceEnCours = true;
-    etapeSequence = 0;
-    executerProchainMouvement = true;
-  }
-  
-  // Si nous sommes dans une séquence et qu'il faut exécuter le prochain mouvement
-  if (sequenceEnCours && executerProchainMouvement && etapeSequence < ETAPES_SEQUENCE_MAX) {
-    float dx = 0.0;
-    float dy = 0.0;
-    
-    // Déterminer la direction du mouvement en fonction de l'étape
-    if (etapeSequence < 10) {
-      // 10 premiers pas : vers la droite (X+)
-      dx = 0.1;
-      dy = 0.0;
-      addLog("[sequence] Étape " + String(etapeSequence+1) + "/30 : Déplacement à droite");
-    } else if (etapeSequence < 20) {
-      // 10 pas suivants : vers le haut (Y+)
-      dx = 0.0;
-      dy = 0.1;
-      addLog("[sequence] Étape " + String(etapeSequence+1) + "/30 : Déplacement en haut");
-    } else {
-      // 10 derniers pas : vers la droite (X+)
-      dx = 0.1;
-      dy = 0.0;
-      addLog("[sequence] Étape " + String(etapeSequence+1) + "/30 : Déplacement à droite");
-    }
-    
-    // Convertir les coordonnées absolues en coordonnées relatives au robot
-    DeltaXY absolutePoint(dx, dy);
-    RobotState currentState(RobotX, RobotY, RobotTheta);
-    DeltaXY robotCoord = convertAbsoluteToRobotCoordinates(absolutePoint, currentState);
-    
-    // Lancer le mouvement
-    demarer(robotCoord.x, robotCoord.y);
-    
-    // Indiquer qu'il faut attendre la fin du mouvement avant le prochain
-    executerProchainMouvement = false;
-  }
-  
-  // Si nous avons terminé toutes les étapes
-  if (etapeSequence >= ETAPES_SEQUENCE_MAX && sequenceEnCours) {
-    sequenceEnCours = false;
-    addLog("[sequence] Séquence automatique terminée");
-  }
-}
-
-// Fonction pour dessiner un cercle de rayon 4cm en 100 points
-void executerSequenceCercle() {
-  // Si la séquence n'est pas déjà en cours, l'initialiser
-  if (!sequenceCercleEnCours) {
-    addLog("[cercle] Début de la séquence cercle");
-    sequenceCercleEnCours = true;
-    etapeCercle = 0;
-    executerProchainPointCercle = true;
-  }
-  
-  // Si nous sommes dans une séquence cercle et qu'il faut exécuter le prochain mouvement
-  if (sequenceCercleEnCours && executerProchainPointCercle && etapeCercle < ETAPES_CERCLE_MAX) {
-    // Calculer l'angle en radians pour cette étape (de 0 à 2π)
-    float angle = 2.0 * PI * etapeCercle / ETAPES_CERCLE_MAX;
-    
-    // Calculer les coordonnées absolues du point du cercle (relatif à la position actuelle)
-    float dx = RAYON_CERCLE * cos(angle) - RAYON_CERCLE * cos(2.0 * PI * (etapeCercle - 1) / ETAPES_CERCLE_MAX);
-    float dy = RAYON_CERCLE * sin(angle) - RAYON_CERCLE * sin(2.0 * PI * (etapeCercle - 1) / ETAPES_CERCLE_MAX);
-    
-    // Pour le premier point, on se déplace juste au début du cercle sans calcul différentiel
-    if (etapeCercle == 0) {
-      dx = RAYON_CERCLE;
-      dy = 0.0;
-    }
-    
-    addLog("[cercle] Étape " + String(etapeCercle+1) + "/" + String(ETAPES_CERCLE_MAX) + " : Angle=" + String(angle * 180.0 / PI, 1) + "°, dx=" + String(dx, 3) + ", dy=" + String(dy, 3));
-    
-    // Convertir les coordonnées absolues en coordonnées relatives au robot
-    DeltaXY absolutePoint(dx, dy);
-    RobotState currentState(RobotX, RobotY, RobotTheta);
-    DeltaXY robotCoord = convertAbsoluteToRobotCoordinates(absolutePoint, currentState);
-    
-    // Lancer le mouvement
-    demarer(robotCoord.x, robotCoord.y);
-    
-    // Indiquer qu'il faut attendre la fin du mouvement avant le prochain
-    executerProchainPointCercle = false;
-  }
-  
-  // Si nous avons terminé toutes les étapes
-  if (etapeCercle >= ETAPES_CERCLE_MAX && sequenceCercleEnCours) {
-    sequenceCercleEnCours = false;
-    addLog("[cercle] Séquence cercle terminée");
-  }
-}
+// Les fonctions executerSequenceAutomatique et executerSequenceCercle ont été déplacées dans le fichier Sequences.h
 
 // Fonction pour réinitialiser la position et l'orientation du robot
 void resetRobot() {
@@ -427,9 +299,7 @@ void resetRobot() {
   countRight = 0;
   
   // Réinitialiser la position et l'orientation
-  RobotX = 0.0;
-  RobotY = 0.0;
-  RobotTheta = 0.0;
+  robotState = RobotState(); // Réinitialiser à 0,0,0 avec le constructeur par défaut
   
   addLog("[reset] Position et orientation réinitialisées à zéro");
   addLog("[reset] X=0.0, Y=0.0, Theta=0.0°");
@@ -581,8 +451,7 @@ void loop() {
           // Convertir les coordonnées absolues en coordonnées relatives au robot
           addLog("[wifi] Conversion de coordonnées absolues vers robot");
           DeltaXY absolutePoint(dx, dy);
-          RobotState currentState(RobotX, RobotY, RobotTheta);
-          DeltaXY robotCoord = convertAbsoluteToRobotCoordinates(absolutePoint, currentState);
+          DeltaXY robotCoord = convertAbsoluteToRobotCoordinates(absolutePoint, robotState);
           // Démarrer le mouvement avec les coordonnées relatives
           demarer(robotCoord.x, robotCoord.y);
         } else {
@@ -604,7 +473,7 @@ void loop() {
             resetRobot();
             
             // Vérifier que la réinitialisation a bien fonctionné
-            addLog("[wifi] Vérification après réinitialisation: X=" + String(RobotX) + ", Y=" + String(RobotY) + ", Theta=" + String(RobotTheta));
+            addLog("[wifi] Vérification après réinitialisation: X=" + String(robotState.x) + ", Y=" + String(robotState.y) + ", Theta=" + String(robotState.theta));
           } else {
             addLog("[wifi] Paramètre reset=1 détecté mais formulaire non soumis");
           }
@@ -668,9 +537,9 @@ void loop() {
       html += "Compilé le " + String(COMPILE_DATE) + " à " + String(COMPILE_TIME);
       html += "</div>";
       html += "<div style='background:#fff;padding:10px;border-radius:10px;margin-bottom:15px;'><strong>Position: </strong>";
-      html += "X: " + String(RobotX, 1) + " cm, ";
-      html += "Y: " + String(RobotY, 1) + " cm, ";
-      html += "Angle: " + String(RobotTheta * 180.0 / PI, 1) + "° </div>";
+      html += "X: " + String(robotState.x, 1) + " cm, ";
+      html += "Y: " + String(robotState.y, 1) + " cm, ";
+      html += "Angle: " + String(robotState.theta * 180.0 / PI, 1) + "° </div>";
       html += "<form action='/' method='get'>";
       html += "<h2>Commande</h2>";
       html += "<div class='input-group'>";
@@ -731,7 +600,7 @@ void loop() {
       html += "<h2>Réinitialisation</h2>";
       html += "<p>Réinitialiser la position du robot à (0,0) et l'angle à 0°</p>";
       html += "<a href='/?reset=1&submit=1' style='background:#F44336; color:white; padding:15px 30px; border-radius:5px; text-decoration:none; display:inline-block; margin:10px; font-weight:bold;'>Réinitialiser position</a>";
-      html += "<p><strong>Position actuelle: X=" + String(RobotX, 2) + " cm, Y=" + String(RobotY, 2) + " cm, Angle=" + String(RobotTheta * 180.0 / PI, 1) + "°</strong></p>";
+      html += "<p><strong>Position actuelle: X=" + String(robotState.x, 2) + " cm, Y=" + String(robotState.y, 2) + " cm, Angle=" + String(robotState.theta * 180.0 / PI, 1) + "°</strong></p>";
       html += "</div>"; // Fin du conteneur pour la réinitialisation
       
       // Affichage des logs
@@ -757,7 +626,7 @@ void loop() {
       deplacementFait = true;
       
       addLog("[position] Mouvement terminé - Robot arrêté");
-      addLog("[position] abasolue X: " + String(RobotX, 2) + " cm | Y: " + String(RobotY, 2) + " cm | Orientation: " + String(RobotTheta * 180.0 / PI, 1) + "°");
+      addLog("[position] abasolue X: " + String(robotState.x, 2) + " cm | Y: " + String(robotState.y, 2) + " cm | Orientation: " + String(robotState.theta * 180.0 / PI, 1) + "°");
       
       // Si nous sommes dans une séquence automatique, préparer l'étape suivante
       if (sequenceEnCours) {
