@@ -45,8 +45,8 @@ long seuilImpulsionsRoueGauche = 0;
 long seuilImpulsionsRoueDroite = 0;
 float distance_en_cm_roue_gauche = 0;
 float distance_en_cm_roue_droite = 0;
-float deltaX_wifi = 0;
-float deltaY_wifi = 0;
+bool directionAvantGauche = true; // true = avant, false = arrière
+bool directionAvantDroite = true; // true = avant, false = arrière
 
 /* ===== VARIABLES POUR SÉQUENCE AUTOMATIQUE ===== */
 bool sequenceEnCours = false;
@@ -104,9 +104,7 @@ struct WheelDistances {
 };
 
 /* ===== POSITION DU ROBOT ===== */
-float RobotX = 0.0;      // Position X du robot en cm
-float RobotY = 0.0;      // Position Y du robot en cm
-float RobotTheta = 0.0;  // Orientation du robot en radians
+RobotState robotState;  // Position et orientation du robot
 
 /* ===== LOGS ===== */
 const int MAX_LOGS = 100; // Augmentation significative du nombre de logs conservés
@@ -136,54 +134,50 @@ void calibrerGyro()
 }
 
 // Calcule les distances des deux roues en fonction du déplacement demandé et met à jour la position du robot
-WheelDistances calculerDistancesRoues(float deltaRobotX, float deltaRobotY) {
+WheelDistances calculerDistancesRoues(DeltaXY robotRelativePoint) {
   WheelDistances distances;
-  distances.left = deltaRobotY + (LARGEUR_ROBOT / (LONGUEUR_ROBOT/2)) * deltaRobotX;
-  distances.right = deltaRobotY - (LARGEUR_ROBOT / (LONGUEUR_ROBOT/2)) * deltaRobotX;  
+  distances.left = robotRelativePoint.y + (LARGEUR_ROBOT / (LONGUEUR_ROBOT/2)) * robotRelativePoint.x;
+  distances.right = robotRelativePoint.y - (LARGEUR_ROBOT / (LONGUEUR_ROBOT/2)) * robotRelativePoint.x;  
 
   addLog("[calculerDistancesRoues] Distances roues: " + String(distances.left, 1) + " cm, " + String(distances.right, 1) + " cm");
 
   return distances;
 }
 
-WheelDistances calculerNouvellePosition(float roueGauche, float roueDroite) {
-  WheelDistances distances;
-  distances.left = roueGauche;
-  distances.right = roueDroite;  
-
+RobotState calculerNouvellePosition(WheelDistances distances) {
+  // Préparer la structure RobotState à renvoyer
+  RobotState newState(robotState.x, robotState.y, robotState.theta);
+  
   // Calcul de l'angle relatif basé sur la différence des distances des roues
   float deltaRoues = distances.left - distances.right;
   float angleRelatif = atan(deltaRoues / (LARGEUR_ROBOT/2));
   
-  addLog("[calculerNouvellePosition] Robot theta avant: " + String(RobotTheta * 180.0 / PI, 1) + "°");
+  addLog("[calculerNouvellePosition] Robot theta avant: " + String(robotState.theta * 180.0 / PI, 1) + "°");
   
   // Calcul du déplacement moyen pour la position
-  float deltaMoyen = (roueGauche + roueDroite) / 2.0;
+  float deltaMoyen = (distances.left + distances.right) / 2.0;
   
   // Mise à jour de la position du robot en fonction de son orientation
-  RobotX += deltaMoyen * cos(RobotTheta + angleRelatif/2.0);
-  RobotY += deltaMoyen * sin(RobotTheta + angleRelatif/2.0);
-  
-  addLog("[calculerNouvellePosition] Nouvelle position robot: X=" + String(RobotX, 1) + " cm, Y=" + String(RobotY, 1) + " cm"); 
+  newState.x = robotState.x + deltaMoyen * cos(robotState.theta + angleRelatif/2.0);
+  newState.y = robotState.y + deltaMoyen * sin(robotState.theta + angleRelatif/2.0);
   
   // Mise à jour de l'angle du robot
-  RobotTheta += angleRelatif;
+  newState.theta = robotState.theta + angleRelatif;
   
   // Normaliser l'angle entre -PI et PI
-  while (RobotTheta > PI) RobotTheta -= 2*PI;
-  while (RobotTheta < -PI) RobotTheta += 2*PI;
+  while (newState.theta > PI) newState.theta -= 2*PI;
+  while (newState.theta < -PI) newState.theta += 2*PI;
   
-  return distances;
+  
+  addLog("[calculerNouvellePosition] Nouvelle position robot: X=" + String(newState.x, 1) + " cm, Y=" + String(newState.y, 1) + " cm"); 
+  
+  return newState;
 }
 
 // Fonction pour convertir les coordonnées absolues en coordonnées relatives au robot
 // Utilise une transformation en coordonnées cylindriques/polaires
-DeltaXY convertAbsoluteToRobotCoordinates(float deltaAbsoluteX, float deltaAbsoluteY) {
+DeltaXY convertAbsoluteToRobotCoordinates(DeltaXY targetPoint, RobotState robotState) {
   addLog("[convertCoords] Début de la conversion de coordonnées absolues en relatives");
-  
-  // Créer les structures à partir des variables globales
-  DeltaXY targetPoint(deltaAbsoluteX, deltaAbsoluteY);
-  RobotState robotState(RobotX, RobotY, RobotTheta);
   
   // Vérifier si le déplacement demandé est trop petit
   if (abs(targetPoint.x) < 0.001 && abs(targetPoint.y) < 0.001) {
@@ -254,10 +248,6 @@ String getAllLogs() {
   return allLogs.length() > 0 ? allLogs : "Aucun log disponible";
 }
 
-// Variables globales pour stocker la direction des roues
-bool directionAvantGauche = true; // true = avant, false = arrière
-bool directionAvantDroite = true; // true = avant, false = arrière
-
 // Fonction pour démarrer le mouvement du robot
 void demarer(float deltaX, float deltaY) {
   addLog("[demarer] DX=" + String(deltaX) + ", DY=" + String(deltaY));
@@ -267,8 +257,11 @@ void demarer(float deltaX, float deltaY) {
     return;
   }
 
+  // Créer une structure DeltaXY pour les coordonnées relatives
+  DeltaXY robotRelativePoint(deltaX, deltaY);
+  
   // Calculer les distances pour chaque roue avec la nouvelle fonction
-  WheelDistances distances = calculerDistancesRoues(deltaX, deltaY);
+  WheelDistances distances = calculerDistancesRoues(robotRelativePoint);
   distance_en_cm_roue_gauche = distances.left;
   distance_en_cm_roue_droite = distances.right;
   
@@ -307,9 +300,9 @@ void demarer(float deltaX, float deltaY) {
   deplacementFait = false;
   addLog("[demarer] Début du mouvement");
   
-  // Calculer la nouvelle position du robot
-  calculerNouvellePosition(distances.left, distances.right);
-  addLog("[demarer] Nouvelle position robot: X=" + String(RobotX, 1) + " cm, Y=" + String(RobotY, 1) + " cm");
+  // Calculer et mettre à jour la position du robot
+  robotState = calculerNouvellePosition(distances);
+  addLog("[demarer] Nouvelle position robot: X=" + String(robotState.x, 1) + " cm, Y=" + String(robotState.y, 1) + " cm");
 } 
 
 // Fonction pour exécuter une séquence automatique de mouvements formant un carré
@@ -346,7 +339,9 @@ void executerSequenceAutomatique() {
     }
     
     // Convertir les coordonnées absolues en coordonnées relatives au robot
-    DeltaXY robotCoord = convertAbsoluteToRobotCoordinates(dx, dy);
+    DeltaXY absolutePoint(dx, dy);
+    RobotState currentState(RobotX, RobotY, RobotTheta);
+    DeltaXY robotCoord = convertAbsoluteToRobotCoordinates(absolutePoint, currentState);
     
     // Lancer le mouvement
     demarer(robotCoord.x, robotCoord.y);
@@ -390,7 +385,9 @@ void executerSequenceCercle() {
     addLog("[cercle] Étape " + String(etapeCercle+1) + "/" + String(ETAPES_CERCLE_MAX) + " : Angle=" + String(angle * 180.0 / PI, 1) + "°, dx=" + String(dx, 3) + ", dy=" + String(dy, 3));
     
     // Convertir les coordonnées absolues en coordonnées relatives au robot
-    DeltaXY robotCoord = convertAbsoluteToRobotCoordinates(dx, dy);
+    DeltaXY absolutePoint(dx, dy);
+    RobotState currentState(RobotX, RobotY, RobotTheta);
+    DeltaXY robotCoord = convertAbsoluteToRobotCoordinates(absolutePoint, currentState);
     
     // Lancer le mouvement
     demarer(robotCoord.x, robotCoord.y);
@@ -424,8 +421,6 @@ void resetRobot() {
   seuilImpulsionsRoueDroite = 0;
   distance_en_cm_roue_gauche = 0;
   distance_en_cm_roue_droite = 0;
-  deltaX_wifi = 0;
-  deltaY_wifi = 0;
   
   // Réinitialiser les compteurs d'encodeurs
   countLeft = 0;
@@ -585,7 +580,9 @@ void loop() {
         if (isAbsoluteCoords) {
           // Convertir les coordonnées absolues en coordonnées relatives au robot
           addLog("[wifi] Conversion de coordonnées absolues vers robot");
-          DeltaXY robotCoord = convertAbsoluteToRobotCoordinates(dx, dy);
+          DeltaXY absolutePoint(dx, dy);
+          RobotState currentState(RobotX, RobotY, RobotTheta);
+          DeltaXY robotCoord = convertAbsoluteToRobotCoordinates(absolutePoint, currentState);
           // Démarrer le mouvement avec les coordonnées relatives
           demarer(robotCoord.x, robotCoord.y);
         } else {
@@ -678,11 +675,11 @@ void loop() {
       html += "<h2>Commande</h2>";
       html += "<div class='input-group'>";
       html += "<label for='dx'>Delta X (cm):</label>";
-      html += "<input type='number' step='0.1' name='dx' id='dx' value='" + String(deltaX_wifi) + "' required>";
+      html += "<input type='number' step='0.1' name='dx' id='dx' value='0' required>";
       html += "</div>";
       html += "<div class='input-group'>";
       html += "<label for='dy'>Delta Y (cm):</label>";
-      html += "<input type='number' step='0.1' name='dy' id='dy' value='" + String(deltaY_wifi) + "' required>";
+      html += "<input type='number' step='0.1' name='dy' id='dy' value='0' required>";
       html += "</div>";
       html += "<div class='input-group'>";
       html += "<label for='type'>Type de coordonnées:</label>";
