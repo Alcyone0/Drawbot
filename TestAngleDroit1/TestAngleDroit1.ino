@@ -65,6 +65,7 @@ bool executerProchainPointCercle = true;
 void demarer(float deltaX, float deltaY); // Déclaration anticipée
 void executerSequenceAutomatique(); // Déclaration pour la séquence automatique
 void executerSequenceCercle(); // Déclaration pour la séquence de cercle
+void naviguerVersPointAbsolu(float targetX, float targetY); // Déclaration pour la navigation vers un point absolu
 
 /* ===== STRUCTURES ===== */
 struct DeltaXY {
@@ -135,7 +136,7 @@ void calibrerGyro()
   biaisGyroZ = somme / N;
 }
 
-// Calcule les distances des deux roues en fonction du déplacement demandé et met à jour la position du robot
+// Calcule les distances des deux roues en fonction du déplacement demandé sans mettre à jour la position du robot
 WheelDistances calculerDistancesRoues(float deltaRobotX, float deltaRobotY) {
   WheelDistances distances;
   distances.left = deltaRobotY + (LARGEUR_ROBOT / LONGUEUR_ROBOT) * deltaRobotX;
@@ -145,22 +146,13 @@ WheelDistances calculerDistancesRoues(float deltaRobotX, float deltaRobotY) {
   float deltaRoues = distances.left - distances.right;
   float angleRelatif = atan(deltaRoues / LARGEUR_ROBOT);
   
-  addLog("[calculerDistancesRoues] Robot theta avant: " + String(RobotTheta * 180.0 / PI, 1) + "°");
-  
-
-  RobotX += deltaRobotX;
-  RobotY += deltaRobotY;
-  addLog("[calculerDistancesRoues] Nouvelle position robot: X=" + String(RobotX, 1) + " cm, Y=" + String(RobotY, 1) + " cm"); 
-  
-  // Mise à jour de l'angle du robot
-  RobotTheta += angleRelatif;
-  
-  // Normaliser l'angle entre -PI et PI
-  while (RobotTheta > PI) RobotTheta -= 2*PI;
-  while (RobotTheta < -PI) RobotTheta += 2*PI;
-  
+  addLog("[calculerDistancesRoues] Robot theta actuel: " + String(RobotTheta * 180.0 / PI, 1) + "°");
+  addLog("[calculerDistancesRoues] DeltaX=" + String(deltaRobotX, 2) + ", DeltaY=" + String(deltaRobotY, 2));
+  addLog("[calculerDistancesRoues] Distances calculées - Gauche: " + String(distances.left, 2) + " cm, Droite: " + String(distances.right, 2) + " cm");
   addLog("[calculerDistancesRoues] Angle relatif calculé: " + String(angleRelatif * 180.0 / PI, 1) + "°");
-  addLog("[calculerDistancesRoues] Nouvel angle robot: " + String(RobotTheta * 180.0 / PI, 1) + "°");
+  
+  // Ne pas mettre à jour la position du robot ici
+  // Les positions seront mises à jour uniquement après que le mouvement est terminé
   
   return distances;
 }
@@ -202,6 +194,78 @@ DeltaXY convertAbsoluteToRobotCoordinates(float deltaAbsoluteX, float deltaAbsol
          
   // Retourner les coordonnées relatives au robot
   return robotRelativePoint;
+}
+
+// Fonction pour calculer l'angle theta entre l'orientation du robot et la direction vers le point cible
+// Basée sur le code Python fourni
+float calculTheta(float x, float y, float omega, float xt, float yt) {
+  // Vecteur directeur du robot (unitaire)
+  float u_x = cos(omega);
+  float u_y = sin(omega);
+  
+  // Vecteur directeur de la trajectoire
+  float v_x = xt - x;
+  float v_y = yt - y;
+  
+  // Norme de v
+  float norm_v = sqrt(v_x*v_x + v_y*v_y);
+  
+  if (norm_v < 0.001) {
+    return 0.0; // Éviter division par zéro
+  }
+  
+  // Normaliser v
+  v_x /= norm_v;
+  v_y /= norm_v;
+  
+  // Produit scalaire
+  float dot_product = u_x * v_x + u_y * v_y;
+  
+  // Limiter le produit scalaire entre -1 et 1 pour éviter les erreurs numériques
+  if (dot_product > 1.0) dot_product = 1.0;
+  if (dot_product < -1.0) dot_product = -1.0;
+  
+  // Calcul de theta (en radians)
+  float theta_rad = acos(dot_product);
+  
+  // Déterminer le signe de theta (pour savoir si tourner à gauche ou droite)
+  // en utilisant le produit vectoriel (déterminant)
+  float cross = u_x * v_y - u_y * v_x;
+  if (cross < 0) {
+    theta_rad = -theta_rad;  // tourner à droite
+  }
+  
+  return theta_rad;
+}
+
+// Fonction pour naviguer vers un point absolu sur la feuille (x, y)
+// Cette fonction calcule le déplacement nécessaire pour atteindre le point cible
+// depuis la position actuelle du robot, en tenant compte de son orientation
+void naviguerVersPointAbsolu(float targetX, float targetY) {
+  addLog("[navPoint] Navigation vers le point absolu (" + String(targetX, 2) + "," + String(targetY, 2) + ")");
+  addLog("[navPoint] Position actuelle: (" + String(RobotX, 2) + "," + String(RobotY, 2) + "), Angle: " + String(RobotTheta * 180.0 / PI, 1) + "°");
+  
+  // Vérifier si on est déjà au point cible (ou très proche)
+  float distance = sqrt(pow(targetX - RobotX, 2) + pow(targetY - RobotY, 2));
+  if (distance < 0.01) {
+    addLog("[navPoint] Déjà au point cible ou très proche, pas de déplacement nécessaire");
+    return;
+  }
+  
+  // Calculer l'angle theta entre l'orientation du robot et la direction vers le point cible
+  float theta = calculTheta(RobotX, RobotY, RobotTheta, targetX, targetY);
+  
+  // Convertir theta en degrés pour les logs
+  addLog("[navPoint] Angle theta calculé: " + String(theta * 180.0 / PI, 1) + "°");
+  
+  // Calculer le déplacement en coordonnées du robot
+  float dx = distance * cos(theta);
+  float dy = distance * sin(theta);
+  
+  addLog("[navPoint] Déplacement relatif calculé: dx=" + String(dx, 2) + ", dy=" + String(dy, 2));
+  
+  // Exécuter le déplacement
+  demarer(dx, dy);
 }
 
 void addLog(String message) {
@@ -247,6 +311,10 @@ String getAllLogs() {
 bool directionAvantGauche = true; // true = avant, false = arrière
 bool directionAvantDroite = true; // true = avant, false = arrière
 
+// Variables pour stocker les données du dernier mouvement
+float lastDeltaX = 0.0;
+float lastDeltaY = 0.0;
+
 // Fonction pour démarrer le mouvement du robot
 void demarer(float deltaX, float deltaY) {
   addLog("[demarer] DX=" + String(deltaX) + ", DY=" + String(deltaY));
@@ -255,6 +323,10 @@ void demarer(float deltaX, float deltaY) {
     addLog("[demarer] Valeurs trop petites, pas de mouvement");
     return;
   }
+  
+  // Sauvegarder les deltas pour les utiliser lors de la mise à jour de la position
+  lastDeltaX = deltaX;
+  lastDeltaY = deltaY;
 
   // Calculer les distances pour chaque roue avec la nouvelle fonction
   WheelDistances distances = calculerDistancesRoues(deltaX, deltaY);
@@ -531,7 +603,10 @@ void loop() {
       int posSubmit = request.indexOf("submit=1");
       
       // Vérifier si la requête contient "GET /?" et le paramètre de soumission
-      if (request.indexOf("GET /?reset=") != -1 && posSubmit != -1) {
+      if (request.indexOf("GET /?targetX=") != -1 && posSubmit != -1) {
+        isFormSubmit = true;
+        addLog("[wifi] Formulaire de navigation vers point absolu recu");
+      } else if (request.indexOf("GET /?reset=") != -1 && posSubmit != -1) {
         isFormSubmit = true;
         addLog("[wifi] Formulaire de réinitialisation recu");
       } else if (request.indexOf("GET /?sequence=") != -1 && posSubmit != -1) {
@@ -543,7 +618,7 @@ void loop() {
       } else if (request.indexOf("GET /?dx=") != -1 && posSubmit != -1) {
         isFormSubmit = true;
         addLog("[wifi] Formulaire de mouvement recu");
-      } else if (request.indexOf("GET /?dx=") != -1 || request.indexOf("GET /?sequence=") != -1 || request.indexOf("GET /?cercle=") != -1 || request.indexOf("GET /?reset=") != -1) {
+      } else if (request.indexOf("GET /?dx=") != -1 || request.indexOf("GET /?sequence=") != -1 || request.indexOf("GET /?cercle=") != -1 || request.indexOf("GET /?reset=") != -1 || request.indexOf("GET /?targetX=") != -1) {
         // C'est un rechargement de page avec les paramètres dans l'URL
         addLog("[wifi] Recharge de page détectée, mouvement ignoré");
       }
@@ -579,12 +654,40 @@ void loop() {
           demarer(dx, dy);
         }
       } else {
-        // Vérifier si c'est une demande pour lancer la séquence automatique (carré ou cercle) ou réinitialiser
+        // Vérifier si c'est une demande pour lancer la séquence automatique (carré ou cercle), réinitialiser ou naviguer
         int posSequence = request.indexOf("sequence=1");
         int posCercle = request.indexOf("cercle=1");
         int posReset = request.indexOf("reset=1");
+        int posTargetX = request.indexOf("targetX=");
+        int posTargetY = request.indexOf("targetY=");
         
-        if (posReset != -1) {
+        // Vérifier si c'est une demande de navigation vers un point absolu
+        if (posTargetX != -1 && isFormSubmit) {
+          addLog("[wifi] Demande de navigation vers un point absolu détectée");
+          // Déterminer la position du paramètre targetY
+          posTargetY = request.indexOf("targetY=");
+          
+          if (posTargetY != -1) {
+            // Extraire les valeurs X et Y
+            float targetX = request.substring(posTargetX + 8, request.indexOf('&', posTargetX)).toFloat();
+            // Vérifier si le paramètre targetY est suivi par un autre paramètre
+            int endPosY = request.indexOf('&', posTargetY + 8);
+            float targetY;
+            if (endPosY != -1) {
+              targetY = request.substring(posTargetY + 8, endPosY).toFloat();
+            } else {
+              // Si pas d'autre paramètre après targetY, prendre jusqu'à la fin
+              targetY = request.substring(posTargetY + 8).toFloat();
+            }
+            
+            addLog("[wifi] Coordonnées cibles: X=" + String(targetX) + ", Y=" + String(targetY));
+            // Lancer la navigation vers le point
+            naviguerVersPointAbsolu(targetX, targetY);
+          } else {
+            addLog("[wifi] Paramètre targetY manquant dans la requête");
+          }
+        }
+        else if (posReset != -1) {
           addLog("[wifi] Détection paramètre reset=1 à la position " + String(posReset));
           if (isFormSubmit) {
             addLog("[wifi] Demande de réinitialisation confirmée");
@@ -722,6 +825,26 @@ void loop() {
       html += "<p><strong>Position actuelle: X=" + String(RobotX, 2) + " cm, Y=" + String(RobotY, 2) + " cm, Angle=" + String(RobotTheta * 180.0 / PI, 1) + "°</strong></p>";
       html += "</div>"; // Fin du conteneur pour la réinitialisation
       
+      // Ajouter un formulaire pour la navigation vers un point absolu
+      html += "<div style='margin-top:20px; margin-bottom:20px;'>";
+      html += "<h2>Navigation vers un point</h2>";
+      html += "<p>Aller vers des coordonnées absolues sur la feuille</p>";
+      html += "<form action='/' method='get'>";
+      html += "<div style='display:flex; justify-content:center; align-items:center; gap:10px;'>";
+      html += "<div>";
+      html += "<label for='targetX'>X (cm):</label>";
+      html += "<input type='number' step='0.1' name='targetX' id='targetX' value='0' style='width:80px;'>";
+      html += "</div>";
+      html += "<div>";
+      html += "<label for='targetY'>Y (cm):</label>";
+      html += "<input type='number' step='0.1' name='targetY' id='targetY' value='0' style='width:80px;'>";
+      html += "</div>";
+      html += "<input type='hidden' name='submit' value='1'>";
+      html += "<input type='submit' value='Naviguer' style='margin-top:20px;'>";
+      html += "</div>";
+      html += "</form>";
+      html += "</div>"; // Fin du conteneur pour la navigation vers un point
+      
       // Affichage des logs
       html += "<h2>Logs</h2>";
       html += "<div class='log-container'>" + getAllLogs() + "</div>";
@@ -743,6 +866,19 @@ void loop() {
       arreter();
       correctionActive = false;
       deplacementFait = true;
+      
+      // Mettre à jour la position du robot après que le mouvement est terminé
+      RobotX += distance_en_cm_roue_droite * cos(RobotTheta) + distance_en_cm_roue_gauche * cos(RobotTheta);
+      RobotY += distance_en_cm_roue_droite * sin(RobotTheta) + distance_en_cm_roue_gauche * sin(RobotTheta);
+      
+      // Mise à jour de l'angle du robot
+      float deltaRoues = distance_en_cm_roue_gauche - distance_en_cm_roue_droite;
+      float angleRelatif = atan(deltaRoues / LARGEUR_ROBOT);
+      RobotTheta += angleRelatif;
+      
+      // Normaliser l'angle entre -PI et PI
+      while (RobotTheta > PI) RobotTheta -= 2*PI;
+      while (RobotTheta < -PI) RobotTheta += 2*PI;
       
       addLog("[position] Mouvement terminé - Robot arrêté");
       addLog("[position] abasolue X: " + String(RobotX, 2) + " cm | Y: " + String(RobotY, 2) + " cm | Orientation: " + String(RobotTheta * 180.0 / PI, 1) + "°");
