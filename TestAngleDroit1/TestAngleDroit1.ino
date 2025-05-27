@@ -595,13 +595,13 @@ void loop() {
       html += "<p>Déplacement absolu de 0,1 cm</p>";
       html += "<div style='display:grid; grid-template-columns:1fr 1fr 1fr; max-width:180px; margin:0 auto; gap:5px;'>";
       html += "<div></div>";
-      html += "<a href='/?dx=0&dy=0.1&type=absolu&submit=1' style='background:#4CAF50; color:white; padding:10px; border-radius:5px; text-decoration:none;'>&#8593;</a>"; // Flèche vers le haut (Y+)
+      html += "<a href='/?dx=0&dy=0.1&type=absolu&submit=1' style='background:#4CAF50; color:white; padding:10px; border-radius:5px; text-decoration:none;'>+y</a>"; // Flèche vers le haut (Y+)
       html += "<div></div>";
-      html += "<a href='/?dx=-0.1&dy=0&type=absolu&submit=1' style='background:#4CAF50; color:white; padding:10px; border-radius:5px; text-decoration:none;'>&#8592;</a>"; // Flèche vers la gauche (X-)
+      html += "<a href='/?dx=-0.1&dy=0&type=absolu&submit=1' style='background:#4CAF50; color:white; padding:10px; border-radius:5px; text-decoration:none;'>-x</a>"; // Flèche vers la gauche (X-)
       html += "<div style='background:#ddd; color:#666; padding:5px; border-radius:5px;'>+0,1</div>"; // Centre
-      html += "<a href='/?dx=0.1&dy=0&type=absolu&submit=1' style='background:#4CAF50; color:white; padding:10px; border-radius:5px; text-decoration:none;'>&#8594;</a>"; // Flèche vers la droite (X+)
+      html += "<a href='/?dx=0.1&dy=0&type=absolu&submit=1' style='background:#4CAF50; color:white; padding:10px; border-radius:5px; text-decoration:none;'>+x</a>"; // Flèche vers la droite (X+)
       html += "<div></div>";
-      html += "<a href='/?dx=0&dy=-0.1&type=absolu&submit=1' style='background:#4CAF50; color:white; padding:10px; border-radius:5px; text-decoration:none;'>&#8595;</a>"; // Flèche vers le bas (Y-)
+      html += "<a href='/?dx=0&dy=-0.1&type=absolu&submit=1' style='background:#4CAF50; color:white; padding:10px; border-radius:5px; text-decoration:none;'>-y</a>"; // Flèche vers le bas (Y-)
       html += "<div></div>";
       html += "</div>"; // Fin de la grille
       html += "</div>"; // Fin du conteneur des boutons directionnels absolus
@@ -612,13 +612,13 @@ void loop() {
       html += "<p>Déplacement relatif au robot de 0,1 cm</p>";
       html += "<div style='display:grid; grid-template-columns:1fr 1fr 1fr; max-width:200px; margin:0 auto; gap:5px;'>";
       html += "<div></div>";
-      html += "<a href='/?dx=0.1&dy=0&type=direct&submit=1' style='background:#2196F3; color:white; padding:10px; border-radius:5px; text-decoration:none; text-align:center;'>AVANT</a>";
+      html += "<a href='/?dx=0.1&dy=0&type=direct&submit=1' style='background:#2196F3; color:white; padding:10px; border-radius:5px; text-decoration:none; text-align:center;'>AV</a>";
       html += "<div></div>";
-      html += "<a href='/?dx=0&dy=0.1&type=direct&submit=1' style='background:#2196F3; color:white; padding:10px; border-radius:5px; text-decoration:none; text-align:center;'>GAUCHE</a>";
+      html += "<a href='/?dx=0&dy=0.1&type=direct&submit=1' style='background:#2196F3; color:white; padding:10px; border-radius:5px; text-decoration:none; text-align:center;'>G</a>";
       html += "<div style='background:#ddd; color:#666; padding:5px; border-radius:5px; text-align:center;'>+0,1</div>";
-      html += "<a href='/?dx=0&dy=-0.1&type=direct&submit=1' style='background:#2196F3; color:white; padding:10px; border-radius:5px; text-decoration:none; text-align:center;'>DROITE</a>";
+      html += "<a href='/?dx=0&dy=-0.1&type=direct&submit=1' style='background:#2196F3; color:white; padding:10px; border-radius:5px; text-decoration:none; text-align:center;'>D</a>";
       html += "<div></div>";
-      html += "<a href='/?dx=-0.1&dy=0&type=direct&submit=1' style='background:#2196F3; color:white; padding:10px; border-radius:5px; text-decoration:none; text-align:center;'>ARRI\u00c8RE</a>";
+      html += "<a href='/?dx=-0.1&dy=0&type=direct&submit=1' style='background:#2196F3; color:white; padding:10px; border-radius:5px; text-decoration:none; text-align:center;'>AR</a>";
       html += "<div></div>";
       html += "</div>"; // Fin de la grille
       
