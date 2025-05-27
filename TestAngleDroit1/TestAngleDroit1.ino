@@ -421,6 +421,7 @@ void loop() {
       int posX = request.indexOf("dx=");
       int posY = request.indexOf("dy=");
       int posType = request.indexOf("type=");
+      int posIncrement = request.indexOf("increment=");
       
       // Vérifier si c'est une vraie requête de formulaire avec des paramètres
       bool isFormSubmit = false;
@@ -517,36 +518,59 @@ void loop() {
       html += "Compilé le " + String(COMPILE_DATE) + " à " + String(COMPILE_TIME);
       html += "</div>";
       
-      // Ajouter les boutons directionnels pour déplacement rapide de 0,1 cm
+      // Récupérer la valeur d'incrément précédente ou utiliser la valeur par défaut (0.1)
+      float increment = 1; // Valeur par défaut
+      if (posIncrement != -1) {
+        String incrementStr = request.substring(posIncrement + 10, request.indexOf('&', posIncrement + 10));
+        float tmpIncrement = incrementStr.toFloat();
+        if (tmpIncrement > 0) {
+          increment = tmpIncrement;
+          addLog("[wifi] Valeur d'incrément: " + String(increment, 2) + " cm");
+        }
+      }
+      
+      // Ajouter le champ pour personnaliser la valeur d'incrément
+      html += "<div style='margin-top:20px; margin-bottom:20px;'>";
+      html += "<h2>Valeur d'incrément</h2>";
+      html += "<form action='/' method='get'>";
+      html += "<input type='number' step='0.01' min='0.01' max='10' name='increment' value='" + String(increment, 2) + "' style='width:100px;'>";
+      html += "<input type='submit' value='Appliquer' style='width:auto;'>";
+      html += "</form>";
+      html += "</div>";
+      
+      // Ajouter les boutons directionnels pour déplacement rapide
       html += "<div style='margin-top:20px; margin-bottom:20px;'>";
       html += "<h2>Déplacement rapide (Absolu)</h2>";
-      html += "<p>Déplacement absolu de 0,1 cm</p>";
+      // Formatter l'affichage de l'incrément avec une virgule au lieu d'un point
+      String incrementDisplay = String(increment, 1);
+      incrementDisplay.replace('.', ',');
+      html += "<p>Déplacement absolu de " + incrementDisplay + " cm</p>";
       html += "<div style='display:grid; grid-template-columns:1fr 1fr 1fr; max-width:180px; margin:0 auto; gap:5px;'>";
       html += "<div></div>";
-      html += "<a href='/?dx=0&dy=0.1&type=absolu&submit=1' style='background:#4CAF50; color:white; padding:10px; border-radius:5px; text-decoration:none;'>+y</a>"; // Flèche vers le haut (Y+)
+      html += "<a href='/?dx=0&dy=" + String(increment) + "&type=absolu&increment=" + String(increment) + "&submit=1' style='background:#4CAF50; color:white; padding:10px; border-radius:5px; text-decoration:none;'>+y</a>"; // Flèche vers le haut (Y+)
       html += "<div></div>";
-      html += "<a href='/?dx=-0.1&dy=0&type=absolu&submit=1' style='background:#4CAF50; color:white; padding:10px; border-radius:5px; text-decoration:none;'>-x</a>"; // Flèche vers la gauche (X-)
-      html += "<div style='background:#ddd; color:#666; padding:5px; border-radius:5px;'>+0,1</div>"; // Centre
-      html += "<a href='/?dx=0.1&dy=0&type=absolu&submit=1' style='background:#4CAF50; color:white; padding:10px; border-radius:5px; text-decoration:none;'>+x</a>"; // Flèche vers la droite (X+)
+      html += "<a href='/?dx=-" + String(increment) + "&dy=0&type=absolu&increment=" + String(increment) + "&submit=1' style='background:#4CAF50; color:white; padding:10px; border-radius:5px; text-decoration:none;'>-x</a>"; // Flèche vers la gauche (X-)
+      html += "<div style='background:#ddd; color:#666; padding:5px; border-radius:5px;'>+" + incrementDisplay + "</div>"; // Centre
+      html += "<a href='/?dx=" + String(increment) + "&dy=0&type=absolu&increment=" + String(increment) + "&submit=1' style='background:#4CAF50; color:white; padding:10px; border-radius:5px; text-decoration:none;'>+x</a>"; // Flèche vers la droite (X+)
       html += "<div></div>";
-      html += "<a href='/?dx=0&dy=-0.1&type=absolu&submit=1' style='background:#4CAF50; color:white; padding:10px; border-radius:5px; text-decoration:none;'>-y</a>"; // Flèche vers le bas (Y-)
+      html += "<a href='/?dx=0&dy=-" + String(increment) + "&type=absolu&increment=" + String(increment) + "&submit=1' style='background:#4CAF50; color:white; padding:10px; border-radius:5px; text-decoration:none;'>-y</a>"; // Flèche vers le bas (Y-)
       html += "<div></div>";
       html += "</div>"; // Fin de la grille
       html += "</div>"; // Fin du conteneur des boutons directionnels absolus
       
-      // Ajouter les boutons directionnels pour déplacement relatif de 0,1 cm
+      // Ajouter les boutons directionnels pour déplacement relatif avec valeur d'incrément variable
       html += "<div style='margin-top:20px; margin-bottom:20px;'>";
       html += "<h2>Déplacement rapide (Relatif)</h2>";
-      html += "<p>Déplacement relatif au robot de 0,1 cm</p>";
+      html += "<p>Déplacement relatif au robot de " + incrementDisplay + " cm</p>";
       html += "<div style='display:grid; grid-template-columns:1fr 1fr 1fr; max-width:200px; margin:0 auto; gap:5px;'>";
       html += "<div></div>";
-      html += "<a href='/?dx=0.1&dy=0&type=direct&submit=1' style='background:#2196F3; color:white; padding:10px; border-radius:5px; text-decoration:none; text-align:center;'>AV</a>";
+      html += "<a href='/?dx=" + String(increment) + "&dy=0&type=direct&increment=" + String(increment) + "&submit=1' style='background:#2196F3; color:white; padding:10px; border-radius:5px; text-decoration:none; text-align:center;'>AV</a>";
       html += "<div></div>";
-      html += "<a href='/?dx=0&dy=0.1&type=direct&submit=1' style='background:#2196F3; color:white; padding:10px; border-radius:5px; text-decoration:none; text-align:center;'>G</a>";
-      html += "<div style='background:#ddd; color:#666; padding:5px; border-radius:5px; text-align:center;'>+0,1</div>";
-      html += "<a href='/?dx=0&dy=-0.1&type=direct&submit=1' style='background:#2196F3; color:white; padding:10px; border-radius:5px; text-decoration:none; text-align:center;'>D</a>";
+      html += "<a href='/?dx=0&dy=" + String(increment) + "&type=direct&increment=" + String(increment) + "&submit=1' style='background:#2196F3; color:white; padding:10px; border-radius:5px; text-decoration:none; text-align:center;'>G</a>";
+      html += "<div style='background:#ddd; color:#666; padding:5px; border-radius:5px; text-align:center;'>+" + incrementDisplay + "</div>";
+      html += "<a href='/?dx=0&dy=-" + String(increment) + "&type=direct&increment=" + String(increment) + "&submit=1' style='background:#2196F3; color:white; padding:10px; border-radius:5px; text-decoration:none; text-align:center;'>D</a>";
       html += "<div></div>";
-      html += "<a href='/?dx=-0.1&dy=0&type=direct&submit=1' style='background:#2196F3; color:white; padding:10px; border-radius:5px; text-decoration:none; text-align:center;'>AR</a>";
+      html += "<a href='/?dx=-" + String(increment) + "&dy=0&type=direct&increment=" + String(increment) + "&submit=1' style='background:#2196F3; color:white; padding:10px; border-radius:5px; text-decoration:none; text-align:center;'>AR</a>";
       html += "<div></div>";
       html += "</div>"; // Fin de la grille
       
