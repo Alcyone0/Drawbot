@@ -9,6 +9,21 @@
 #define EN_D   23
 #define EN_G    4
 
+// Fonctions pour les encodeurs - déclarées ici car elles sont nécessaires pour initMotorPins
+extern void countLeftEncoder();
+extern void countRightEncoder();
+
+// Initialisation des broches des moteurs et encodeurs
+void initMotorPins() {
+  pinMode(IN_1_D, OUTPUT); pinMode(IN_2_D, OUTPUT);
+  pinMode(IN_1_G, OUTPUT); pinMode(IN_2_G, OUTPUT);
+  pinMode(EN_D, OUTPUT);   pinMode(EN_G, OUTPUT);
+  pinMode(encoderLeftA, INPUT);
+  pinMode(encoderRightA, INPUT);
+  attachInterrupt(digitalPinToInterrupt(encoderLeftA), countLeftEncoder, RISING);
+  attachInterrupt(digitalPinToInterrupt(encoderRightA), countRightEncoder, RISING);
+}
+
 void arreter()
 {
   analogWrite(EN_D, 0);  analogWrite(EN_G, 0);

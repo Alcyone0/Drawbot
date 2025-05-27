@@ -13,7 +13,12 @@ extern bool directionAvantDroite;
 extern const int PWM_MIN;
 extern const int PWM_MAX;
 
+// Broches des encodeurs
+extern const int encoderLeftA;
+extern const int encoderRightA;
+
 // Fonctions de contrôle des moteurs
+void initMotorPins();
 void arreter();
 bool avancerCorrige();
 

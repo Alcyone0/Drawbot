@@ -13,12 +13,7 @@ LSM6DS3 imu(I2C_MODE, 0x6B);
 float biaisGyroZ = 0.0;
 
 /* ===== MOTEURS ===== */
-#define IN_1_D 19
-#define IN_2_D 18
-#define IN_1_G 17
-#define IN_2_G 16
-#define EN_D   23
-#define EN_G    4
+// Broches définies dans PID.cpp
 
 /* ===== ENCODEURS ===== */
 const int encoderLeftA  = 27;
@@ -268,13 +263,8 @@ void setup()
 
   calibrerGyro();
 
-  pinMode(IN_1_D, OUTPUT); pinMode(IN_2_D, OUTPUT);
-  pinMode(IN_1_G, OUTPUT); pinMode(IN_2_G, OUTPUT);
-  pinMode(EN_D, OUTPUT);   pinMode(EN_G, OUTPUT);
-  pinMode(encoderLeftA, INPUT);
-  pinMode(encoderRightA, INPUT);
-  attachInterrupt(digitalPinToInterrupt(encoderLeftA),  countLeftEncoder,  RISING);
-  attachInterrupt(digitalPinToInterrupt(encoderRightA), countRightEncoder, RISING);
+  // Initialisation des broches des moteurs et encodeurs dans le module PID
+  initMotorPins();
 
   resetRobot(); 
   setupWiFi();
