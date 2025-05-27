@@ -36,7 +36,7 @@ bool deplacementFait = true; // Set to true initially to prevent movement until 
 
 /* ===== PARAMÈTRES ===== */
 const float IMPULSIONS_PAR_CM = 34.0;
-const int   PWM_MIN = 80;
+const int   PWM_MIN = 90;
 const int   PWM_MAX = 110;
 const float DIST_STYLO_CM = 13.0;
 const float LARGEUR_ROBOT = 8.5/2;
