@@ -10,11 +10,7 @@ extern bool sequenceEnCours;
 extern int etapeSequence;
 extern const int ETAPES_SEQUENCE_MAX;
 extern bool executerProchainMouvement;
-extern bool sequenceCercleEnCours;
-extern int etapeCercle;
-extern const int ETAPES_CERCLE_MAX;
-extern const float RAYON_CERCLE;
-extern bool executerProchainPointCercle;
+
 
 // Prototypes de fonctions
 void addLog(String message);
@@ -72,42 +68,6 @@ void executerSequenceAutomatique() {
   }
 }
 
-// Fonction pour dessiner un cercle de rayon 4cm en 100 points
-void executerSequenceCercle() {
-  // Si la séquence n'est pas déjà en cours, l'initialiser
-  if (!sequenceCercleEnCours) {
-    addLog("[cercle] Début de la séquence cercle");
-    sequenceCercleEnCours = true;
-    etapeCercle = 0;
-    executerProchainPointCercle = true;
-  }
-  
-  // Si nous sommes dans une séquence cercle et qu'il faut exécuter le prochain point
-  if (sequenceCercleEnCours && executerProchainPointCercle && etapeCercle < ETAPES_CERCLE_MAX) {
-    // Calculer les coordonnées du point sur le cercle
-    float angle = 2.0 * PI * etapeCercle / ETAPES_CERCLE_MAX;
-    float dx = RAYON_CERCLE * cos(angle);
-    float dy = RAYON_CERCLE * sin(angle);
-    
-    addLog("[cercle] Point " + String(etapeCercle+1) + "/" + String(ETAPES_CERCLE_MAX) + 
-           " : Angle=" + String(angle * 180.0 / PI, 1) + "°, X=" + String(dx, 2) + ", Y=" + String(dy, 2));
-    
-    // Convertir les coordonnées absolues en coordonnées relatives au robot
-    DeltaXY absolutePoint(dx, dy);
-    DeltaXY robotCoord = convertAbsoluteToRobotCoordinates(absolutePoint, robotState);
-    
-    // Lancer le mouvement
-    demarer(robotCoord.x, robotCoord.y);
-    
-    // Indiquer qu'il faut attendre la fin du mouvement avant le prochain
-    executerProchainPointCercle = false;
-    
-    // Si nous avons atteint la fin de la séquence
-    if (etapeCercle >= ETAPES_CERCLE_MAX - 1) {
-      sequenceCercleEnCours = false;
-      addLog("[cercle] Fin de la séquence cercle");
-    }
-  }
-}
+
 
 #endif // SEQUENCES_H

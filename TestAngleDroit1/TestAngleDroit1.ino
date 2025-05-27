@@ -56,17 +56,12 @@ int etapeSequence = 0;
 const int ETAPES_SEQUENCE_MAX = 30; // 10 pas à droite + 10 pas en haut + 10 pas à droite
 bool executerProchainMouvement = true;
 
-/* ===== VARIABLES POUR SÉQUENCE CERCLE ===== */
-bool sequenceCercleEnCours = false;
-int etapeCercle = 0;
-const int ETAPES_CERCLE_MAX = 100; // 100 points pour le cercle
-const float RAYON_CERCLE = 0.5; // Rayon du cercle en cm (diamètre 1cm)
-bool executerProchainPointCercle = true;
+
 
 /* ===== PROTOTYPES DE FONCTIONS ===== */
 void demarer(float deltaX, float deltaY); // Déclaration anticipée
 void executerSequenceAutomatique(); // Déclaration pour la séquence automatique
-void executerSequenceCercle(); // Déclaration pour la séquence de cercle
+
 
 /* ===== STRUCTURES ===== */
 // Les structures ont été déplacées dans le fichier RobotStructures.h
@@ -278,20 +273,17 @@ void demarer(float deltaX, float deltaY) {
   addLog("[demarer] Nouvelle position robot: X=" + String(robotState.x, 1) + " cm, Y=" + String(robotState.y, 1) + " cm");
 } 
 
-// Les fonctions executerSequenceAutomatique et executerSequenceCercle ont été déplacées dans le fichier Sequences.h
+// La fonction executerSequenceAutomatique a été déplacée dans le fichier Sequences.h
 
 // Fonction pour réinitialiser la position et l'orientation du robot
 void resetRobot() {
   // Arrêter le robot et toute séquence en cours
   arreter();
   sequenceEnCours = false;
-  sequenceCercleEnCours = false;
   deplacementFait = true;
   correctionActive = false;
   etapeSequence = 0;
-  etapeCercle = 0;
   executerProchainMouvement = true;
-  executerProchainPointCercle = true;
   
   // Réinitialiser les seuils et les distances
   seuilImpulsionsRoueGauche = 0;
@@ -369,7 +361,6 @@ void setup()
 
   // S'assurer que les séquences sont désactivées au démarrage
   sequenceEnCours = false;
-  sequenceCercleEnCours = false;
   deplacementFait = true; // Pour éviter que le robot ne bouge au démarrage
   
   WiFi.softAP(ssid, password);
@@ -391,7 +382,7 @@ void loop() {
   static bool firstRun = true;
   if (firstRun) {
     sequenceEnCours = false;
-    sequenceCercleEnCours = false;
+
     deplacementFait = true;
     firstRun = false;
     addLog("[loop] Premier démarrage, séquences désactivées");
@@ -424,16 +415,14 @@ void loop() {
       } else if (request.indexOf("GET /?sequence=") != -1 && posSubmit != -1) {
         isFormSubmit = true;
         addLog("[wifi] Formulaire de séquence carré recu");
-      } else if (request.indexOf("GET /?cercle=") != -1 && posSubmit != -1) {
-        isFormSubmit = true;
-        addLog("[wifi] Formulaire de séquence cercle recu");
+
       } else if (request.indexOf("GET /?dx=") != -1 && posSubmit != -1) {
         isFormSubmit = true;
         addLog("[wifi] Formulaire de mouvement recu");
       } else if (request.indexOf("GET /?target_x=") != -1 && posSubmit != -1) {
         isFormSubmit = true;
         addLog("[wifi] Formulaire de test de coordonnées recu");
-      } else if (request.indexOf("GET /?dx=") != -1 || request.indexOf("GET /?sequence=") != -1 || request.indexOf("GET /?cercle=") != -1 || request.indexOf("GET /?reset=") != -1 || request.indexOf("GET /?target_x=") != -1) {
+      } else if (request.indexOf("GET /?dx=") != -1 || request.indexOf("GET /?sequence=") != -1 ||  request.indexOf("GET /?reset=") != -1 || request.indexOf("GET /?target_x=") != -1) {
         // C'est un rechargement de page avec les paramètres dans l'URL
         addLog("[wifi] Recharge de page détectée, mouvement ignoré");
       }
@@ -489,9 +478,9 @@ void loop() {
           demarer(dx, dy);
         }
       } else {
-        // Vérifier si c'est une demande pour lancer la séquence automatique (carré ou cercle) ou réinitialiser
+        // Vérifier si c'est une demande pour lancer la séquence automatique (carré) ou réinitialiser
         int posSequence = request.indexOf("sequence=1");
-        int posCercle = request.indexOf("cercle=1");
+  
         int posReset = request.indexOf("reset=1");
         
         if (posReset != -1) {
@@ -511,7 +500,7 @@ void loop() {
           if (isFormSubmit) {
             addLog("[wifi] Demande de démarrage de la séquence automatique confirmée");
             // Démarrer la séquence si le robot n'est pas déjà en mouvement
-            if (deplacementFait && !sequenceEnCours && !sequenceCercleEnCours) {
+            if (deplacementFait && !sequenceEnCours) {
               sequenceEnCours = true;
               etapeSequence = 0;
               executerProchainMouvement = true;
@@ -523,24 +512,6 @@ void loop() {
             }
           } else {
             addLog("[wifi] Paramètre sequence=1 détecté mais formulaire non soumis");
-          }
-        } else if (posCercle != -1) {
-          addLog("[wifi] Détection paramètre cercle=1 à la position " + String(posCercle));
-          if (isFormSubmit) {
-            addLog("[wifi] Demande de démarrage de la séquence cercle confirmée");
-            // Démarrer la séquence cercle si le robot n'est pas déjà en mouvement
-            if (deplacementFait && !sequenceCercleEnCours && !sequenceEnCours) {
-              sequenceCercleEnCours = true;
-              etapeCercle = 0;
-              executerProchainPointCercle = true;
-              addLog("[wifi] Séquence cercle lancée - variables: sequenceCercleEnCours=" + String(sequenceCercleEnCours) + ", etapeCercle=" + String(etapeCercle));
-              // Exécuter immédiatement la première étape
-              executerSequenceCercle();
-            } else {
-              addLog("[wifi] Impossible de démarrer la séquence cercle, robot occupé - deplacementFait=" + String(deplacementFait) + ", sequenceCercleEnCours=" + String(sequenceCercleEnCours));
-            }
-          } else {
-            addLog("[wifi] Paramètre cercle=1 détecté mais formulaire non soumis");
           }
         } else {
           // Si c'est juste un chargement de page sans soumission
@@ -675,13 +646,7 @@ void loop() {
         // Ajouter un court délai entre les mouvements
         delay(200);
       }
-      // Si nous sommes dans une séquence de cercle, préparer le point suivant
-      else if (sequenceCercleEnCours) {
-        etapeCercle++;
-        executerProchainPointCercle = true;
-        // Ajouter un court délai entre les mouvements
-        delay(200);
-      }
+
     }
   }
   
@@ -690,8 +655,5 @@ void loop() {
     executerSequenceAutomatique();
   }
   
-  // Si une séquence de cercle est en cours, continuer son exécution
-  if (sequenceCercleEnCours && deplacementFait) {
-    executerSequenceCercle();
-  }
+
 }
