@@ -5,6 +5,8 @@
 #include "RobotStructures.h"
 #include "Sequences.h"
 #include "logger.h"
+#include "PID.h"
+
 
 /* ===== IMU ===== */
 LSM6DS3 imu(I2C_MODE, 0x6B);
@@ -73,13 +75,6 @@ RobotState robotState;  // Position et orientation du robot
 /* === UTILS === */
 void countLeftEncoder()  { countLeft++; }
 void countRightEncoder() { countRight++; }
-
-void arreter()
-{
-  analogWrite(EN_D, 0);  analogWrite(EN_G, 0);
-  digitalWrite(IN_1_D, LOW); digitalWrite(IN_2_D, LOW);
-  digitalWrite(IN_1_G, LOW); digitalWrite(IN_2_G, LOW);
-}
  
 void calibrerGyro()
 {
@@ -227,8 +222,6 @@ void demarer(float deltaX, float deltaY) {
   addLog("[demarer] Nouvelle position robot: X=" + String(robotState.x, 1) + " cm, Y=" + String(robotState.y, 1) + " cm");
 } 
 
-// Les fonctions executerSequenceAutomatique et executerSequenceCercle ont été déplacées dans le fichier Sequences.h
-
 // Fonction pour réinitialiser la position et l'orientation du robot
 void resetRobot() {
   // Arrêter le robot et toute séquence en cours
@@ -259,40 +252,6 @@ void resetRobot() {
   addLog("[reset] X=0.0, Y=0.0, Theta=0.0°");
 }
 
-bool avancerCorrige() {
-  // Configurer la direction des moteurs en fonction des valeurs calculées
-  if (directionAvantDroite) {
-    digitalWrite(IN_1_D, HIGH); digitalWrite(IN_2_D, LOW);
-  } else {
-    digitalWrite(IN_1_D, LOW); digitalWrite(IN_2_D, HIGH);
-  }
-  
-  if (directionAvantGauche) {
-    digitalWrite(IN_1_G, LOW); digitalWrite(IN_2_G, HIGH);
-  } else {
-    digitalWrite(IN_1_G, HIGH); digitalWrite(IN_2_G, LOW);
-  }
-  
-  int erreurGauche = seuilImpulsionsRoueGauche - countLeft;
-  int erreurDroite = seuilImpulsionsRoueDroite - countRight;
-
-  float Kp = 10;
-  int correctionGauche = Kp * erreurGauche;
-  int correctionDroite = Kp * erreurDroite;
-
-  int pwmD = constrain(PWM_MIN + correctionDroite,PWM_MIN , PWM_MAX);
-  int pwmG = constrain(PWM_MIN + correctionGauche, PWM_MIN, PWM_MAX);
-
-  analogWrite(EN_D, pwmD);
-  analogWrite(EN_G, pwmG);
-
-  bool fini = (countLeft >= seuilImpulsionsRoueGauche) && (countRight >= seuilImpulsionsRoueDroite);
-  if (fini) {
-    addLog("[avancerCorrige] Déplacement terminé");
-  }
-  return fini;
-}
-
 void setup()
 {
   Serial.begin(115200);
@@ -317,14 +276,8 @@ void setup()
   attachInterrupt(digitalPinToInterrupt(encoderLeftA),  countLeftEncoder,  RISING);
   attachInterrupt(digitalPinToInterrupt(encoderRightA), countRightEncoder, RISING);
 
-  // S'assurer que les séquences sont désactivées au démarrage
-  sequenceEnCours = false;
-  sequenceCercleEnCours = false;
-  deplacementFait = true; // Pour éviter que le robot ne bouge au démarrage
-  
+  resetRobot(); 
   setupWiFi();
-  
-  // S'assurer que le robot est arrêté au démarrage
   arreter();
 }
 
