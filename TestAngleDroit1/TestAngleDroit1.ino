@@ -127,8 +127,8 @@ RobotState calculerNouvellePosition(WheelDistances distances) {
   float angle = robotState.theta + angleRelatif;
   
   // Mise à jour de la position du robot en fonction de son orientation
-  newState.x = robotState.x + deplacementAxeRobot * cos(robotState.theta) + deplacementLatéral * (-sin(robotState.theta + PI/2)); // Attention à cos sin et au + -
-  newState.y = robotState.y + deplacementAxeRobot * sin(robotState.theta) + deplacementLatéral * cos(robotState.theta + PI/2); // Attention à cos sin et au + -
+  newState.x = robotState.x + deplacementAxeRobot * sin(robotState.theta) + deplacementLatéral * (-cos(robotState.theta)); // Attention à cos sin et au + -
+  newState.y = robotState.y + deplacementAxeRobot * cos(robotState.theta) + deplacementLatéral * sin(robotState.theta); // Attention à cos sin et au + -
   
   // Mise à jour de l'angle du robot
   newState.theta = angle;
@@ -434,25 +434,29 @@ void loop() {
       }
       // Traiter le formulaire de mouvement standard
       else if (posX != -1 && posY != -1 && isFormSubmit) {
-        // Déterminer le type de coordonnées (absolu ou robot)
-        bool isAbsoluteCoords = true; // Par défaut, on considère les coordonnées comme absolues
+        // Déterminer le type de coordonnées (absolu, robot, ou direct)
+        String coordType = "absolu"; // Par défaut, on considère les coordonnées comme absolues
         
         if (posType != -1) {
           String typeValue = request.substring(posType + 5, request.indexOf('&', posType + 5));
           if (typeValue == "robot") {
-            isAbsoluteCoords = false;
+            coordType = "robot";
             addLog("[wifi] Type de coordonnées: relatives au robot");
+          } else if (typeValue == "direct") {
+            coordType = "direct";
+            addLog("[wifi] Type de coordonnées: directes (sans conversion)");
           } else {
             addLog("[wifi] Type de coordonnées: absolues");
           }
         } else {
           addLog("[wifi] Type non spécifié, utilisation des coordonnées absolues par défaut");
         }
+        
         float dx = request.substring(posX + 3, request.indexOf('&', posX)).toFloat();
         float dy = request.substring(posY + 3).toFloat();
         addLog("[wifi] Valeurs reçues: dx=" + String(dx) + ", dy=" + String(dy));
         
-        if (isAbsoluteCoords) {
+        if (coordType == "absolu") {
           // Convertir les coordonnées absolues en coordonnées relatives au robot
           addLog("[wifi] Conversion de coordonnées absolues vers robot");
           DeltaXY absolutePoint(dx, dy);
@@ -460,8 +464,8 @@ void loop() {
           // Démarrer le mouvement avec les coordonnées relatives
           demarer(robotCoord.x, robotCoord.y);
         } else {
-          // Utiliser directement les coordonnées relatives au robot
-          addLog("[wifi] Utilisation directe des coordonnées relatives au robot");
+          // Utiliser directement les coordonnées relatives au robot (type=robot ou type=direct)
+          addLog("[wifi] Utilisation directe des coordonnées: " + coordType + " (" + String(dx, 2) + ", " + String(dy, 2) + ")");
           demarer(dx, dy);
         }
       } else {
@@ -551,7 +555,7 @@ void loop() {
       
       // Ajouter les boutons directionnels pour déplacement rapide de 0,1 cm
       html += "<div style='margin-top:20px; margin-bottom:20px;'>";
-      html += "<h2>Déplacement rapide</h2>";
+      html += "<h2>Déplacement rapide (Absolu)</h2>";
       html += "<p>Déplacement absolu de 0,1 cm</p>";
       html += "<div style='display:grid; grid-template-columns:1fr 1fr 1fr; max-width:180px; margin:0 auto; gap:5px;'>";
       html += "<div></div>";
@@ -564,7 +568,34 @@ void loop() {
       html += "<a href='/?dx=0&dy=-0.1&type=absolu&submit=1' style='background:#4CAF50; color:white; padding:10px; border-radius:5px; text-decoration:none;'>&#8595;</a>"; // Flèche vers le bas (Y-)
       html += "<div></div>";
       html += "</div>"; // Fin de la grille
-      html += "</div>"; // Fin du conteneur des boutons directionnels
+      html += "</div>"; // Fin du conteneur des boutons directionnels absolus
+      
+      // Ajouter les boutons directionnels pour déplacement relatif de 0,1 cm
+      html += "<div style='margin-top:20px; margin-bottom:20px;'>";
+      html += "<h2>Déplacement rapide (Relatif)</h2>";
+      html += "<p>Déplacement relatif au robot de 0,1 cm</p>";
+      html += "<div style='display:grid; grid-template-columns:1fr 1fr 1fr; max-width:200px; margin:0 auto; gap:5px;'>";
+      html += "<div></div>";
+      html += "<a href='/?dx=0&dy=0.1&type=direct&submit=1' style='background:#2196F3; color:white; padding:10px; border-radius:5px; text-decoration:none; text-align:center;'>AVANT</a>";
+      html += "<div></div>";
+      html += "<a href='/?dx=-0.1&dy=0&type=direct&submit=1' style='background:#2196F3; color:white; padding:10px; border-radius:5px; text-decoration:none; text-align:center;'>GAUCHE</a>";
+      html += "<div style='background:#ddd; color:#666; padding:5px; border-radius:5px; text-align:center;'>+0,1</div>";
+      html += "<a href='/?dx=0.1&dy=0&type=direct&submit=1' style='background:#2196F3; color:white; padding:10px; border-radius:5px; text-decoration:none; text-align:center;'>DROITE</a>";
+      html += "<div></div>";
+      html += "<a href='/?dx=0&dy=-0.1&type=direct&submit=1' style='background:#2196F3; color:white; padding:10px; border-radius:5px; text-decoration:none; text-align:center;'>ARRIÈRE</a>";
+      html += "<div></div>";
+      html += "</div>"; // Fin de la grille
+      
+      // Affichage des distances parcourues par les roues
+      html += "<div style='margin-top:10px; background:#e8f5ff; padding:10px; border-radius:5px; width:100%; max-width:400px; margin-left:auto; margin-right:auto;'>";
+      html += "<h3>Distances parcourues par les roues</h3>";
+      html += "<table style='width:100%; border-collapse:collapse;'>";
+      html += "<tr><th style='text-align:left; padding:5px; border-bottom:1px solid #ccc;'>Roue gauche:</th><td style='text-align:right; padding:5px; border-bottom:1px solid #ccc;'>" + String(distance_en_cm_roue_gauche, 2) + " cm</td></tr>";
+      html += "<tr><th style='text-align:left; padding:5px;'>Roue droite:</th><td style='text-align:right; padding:5px;'>" + String(distance_en_cm_roue_droite, 2) + " cm</td></tr>";
+      html += "</table>";
+      html += "</div>";
+      
+      html += "</div>"; // Fin du conteneur des boutons directionnels relatifs
       
       // Ajouter le bouton pour la séquence automatique (carré)
       html += "<div style='margin-top:20px; margin-bottom:20px;'>";
