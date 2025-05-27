@@ -112,22 +112,23 @@ RobotState calculerNouvellePosition(WheelDistances distances) {
   RobotState newState(robotState.x, robotState.y, robotState.theta);
   
   // Calcul de la distance moyenne parcourue par les deux roues
-  float distance = (distances.left + distances.right) / 2.0;
-  
+  float deplacementAxeRobot = (distances.left + distances.right) / 2.0;
+
   // Calcul de la différence entre les distances des roues
-  float deltaRoues = distances.left - distances.right;
+  float deltaRoues = distances.left - distances.right; // Attention au signe
   
-  // Calcul de l'angle relatif avec atan2 au lieu de atan
-  float angleRelatif = atan2(deltaRoues, LARGEUR_ROBOT);
-  
-  addLog("[calculerNouvellePosition] Robot theta avant: " + String(robotState.theta * 180.0 / PI, 1) + "°");
+  // Calcul de l'angle relatif avec atan2
+  float angleRelatif = atan2(deltaRoues, LARGEUR_ROBOT); // Attention à l'ordre
+
+  // Déplacement latéral
+  float deplacementLatéral = LONGUEUR_ROBOT * sin(angleRelatif);
   
   // Calcul de l'angle absolu
   float angle = robotState.theta + angleRelatif;
   
   // Mise à jour de la position du robot en fonction de son orientation
-  newState.x = robotState.x + distance * cos(angle);
-  newState.y = robotState.y + distance * sin(angle);
+  newState.x = robotState.x + deplacementAxeRobot * cos(robotState.theta) + deplacementLatéral * sin(robotState.theta + PI/2); // Attention à cos sin et au + -
+  newState.y = robotState.y + deplacementAxeRobot * sin(robotState.theta) + deplacementLatéral * cos(robotState.theta + PI/2); // Attention à cos sin et au + -
   
   // Mise à jour de l'angle du robot
   newState.theta = angle;
@@ -135,7 +136,6 @@ RobotState calculerNouvellePosition(WheelDistances distances) {
   // Normaliser l'angle entre -PI et PI
   while (newState.theta > PI) newState.theta -= 2*PI;
   while (newState.theta < -PI) newState.theta += 2*PI;
-  
   
   addLog("[calculerNouvellePosition] Nouvelle position robot: X=" + String(newState.x, 1) + " cm, Y=" + String(newState.y, 1) + " cm"); 
   
