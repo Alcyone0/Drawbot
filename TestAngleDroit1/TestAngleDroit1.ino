@@ -8,17 +8,10 @@
 #include "PID.h"
 #include "calculs.h"
 
-
 /* ===== IMU ===== */
 LSM6DS3 imu(I2C_MODE, 0x6B);
 float biaisGyroZ = 0.0;
 
-/* ===== MOTEURS ===== */
-// Broches définies dans PID.cpp
-
-/* ===== COMPTEURS ENCODEURS ===== */
-volatile long countLeft = 0;   // Pour la roue gauche
-volatile long countRight = 0;  // Pour la roue droite
 
 /* ===== ÉTATS DU ROBOT ===== */
 bool demarre = false;
@@ -42,18 +35,21 @@ extern float distance_en_cm_roue_droite;
 extern bool directionAvantGauche;
 extern bool directionAvantDroite;
 
-/* ===== VARIABLES POUR SÉQUENCE AUTOMATIQUE ===== */
-bool sequenceEnCours = false;
-int etapeSequence = 0;
-const int ETAPES_SEQUENCE_MAX = 30; // 10 pas à droite + 10 pas en haut + 10 pas à droite
-bool executerProchainMouvement = true;
+/* ===== COMPTEURS ENCODEURS ===== */
+volatile long countLeft = 0;   // Pour la roue gauche
+volatile long countRight = 0;  // Pour la roue droite
 
-/* ===== VARIABLES POUR SÉQUENCE CERCLE ===== */
-bool sequenceCercleEnCours = false;
-int etapeCercle = 0;
-const int ETAPES_CERCLE_MAX = 100; // 100 points pour le cercle
-const float RAYON_CERCLE = 0.5; // Rayon du cercle en cm (diamètre 1cm)
-bool executerProchainPointCercle = true;
+/* ===== VARIABLES POUR SÉQUENCE ===== */
+// Déplacées dans Sequences.cpp
+extern bool sequenceEnCours;
+extern int etapeSequence;
+extern const int ETAPES_SEQUENCE_MAX;
+extern bool executerProchainMouvement;
+extern bool sequenceCercleEnCours;
+extern int etapeCercle;
+extern const int ETAPES_CERCLE_MAX;
+extern const float RAYON_CERCLE;
+extern bool executerProchainPointCercle;
 
 /* ===== POSITION DU ROBOT ===== */
 RobotState robotState;  // Position et orientation du robot

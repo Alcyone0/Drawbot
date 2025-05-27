@@ -1,5 +1,18 @@
 #include "Sequences.h"
 
+/* ===== VARIABLES POUR SÉQUENCE AUTOMATIQUE ===== */
+bool sequenceEnCours = false;
+int etapeSequence = 0;
+const int ETAPES_SEQUENCE_MAX = 30; // 10 pas à droite + 10 pas en haut + 10 pas à droite
+bool executerProchainMouvement = true;
+
+/* ===== VARIABLES POUR SÉQUENCE CERCLE ===== */
+bool sequenceCercleEnCours = false;
+int etapeCercle = 0;
+const int ETAPES_CERCLE_MAX = 100; // 100 points pour le cercle
+const float RAYON_CERCLE = 0.5; // Rayon du cercle en cm (diamètre 1cm)
+bool executerProchainPointCercle = true;
+
 // Fonction pour exécuter une séquence automatique de mouvements formant un carré
 void executerSequenceAutomatique() {
   // Si la séquence n'est pas déjà en cours, l'initialiser
