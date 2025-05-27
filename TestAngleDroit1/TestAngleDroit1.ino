@@ -468,7 +468,7 @@ void loop() {
         if (coordType == "absolu") {
           // Convertir les coordonnées absolues en coordonnées relatives au robot
           addLog("[wifi] Conversion de coordonnées absolues vers robot");
-          DeltaXY absolutePoint(dx, dy);
+          DeltaXY absolutePoint(robotState.x + dx, robotState.y + dy);
           DeltaXY robotCoord = convertAbsoluteToRobotCoordinates(absolutePoint, robotState);
           // Démarrer le mouvement avec les coordonnées relatives
           demarer(robotCoord.x, robotCoord.y);
