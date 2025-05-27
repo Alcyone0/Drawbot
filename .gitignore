@@ -25,6 +25,24 @@
 *.la
 *.a
 *.lib
+*.bin
+*.cache
+*.csv
+*.elf
+*.map
+*.o
+*.obj
+*.out
+*.pyc
+*.pyo
+*.pyd
+*.pyw
+*.py
+*.so
+*.swp
+*.swo
+*.tmp
+*.zip
 
 # Executables
 *.exe
@@ -32,4 +50,5 @@
 *.app
 
 # Build directory
-Build/*
+TestAngleDroit1/Build/*
+
