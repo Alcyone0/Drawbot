@@ -182,18 +182,26 @@ RobotState calculerNouvellePositionReelle(int tickLeft, int tickRight) {
 }
 
 // Fonction pour convertir les coordonnées absolues en coordonnées relatives au robot
-// Utilise une transformation en coordonnées cylindriques/polaires
 DeltaXY convertAbsoluteToRobotCoordinates(DeltaXY targetPoint, RobotState robotState) {
   float deltaX = targetPoint.x - robotState.x;
   float deltaY = targetPoint.y - robotState.y;
   float distance = sqrt(deltaX * deltaX + deltaY * deltaY);
 
+  addLog("[convertAbsoluteToRobotCoordinates] Delta X = " + String(deltaX, 2));
+  addLog("[convertAbsoluteToRobotCoordinates] Delta Y = " + String(deltaY, 2));
+  addLog("[convertAbsoluteToRobotCoordinates] Distance = " + String(distance, 2));
+
   float angle = atan2(deltaY, deltaX); // Angle par rapport à l'axe X
-  float angleRelatif = robotState.theta - angle;
+  addLog("[convertAbsoluteToRobotCoordinates] AngleAbsolu = " + String(angle*180/PI, 2));
+  float angleRelatif =  angle - robotState.theta;
+  addLog("[convertAbsoluteToRobotCoordinates] Angle relatif = " + String(angleRelatif*180/PI, 2));
+  addLog("[convertAbsoluteToRobotCoordinates] Angle Robot = " + String(robotState.theta*180/PI, 2));
   
   // 3. Reconvertir en coordonnées cartésiennes relatives au robot
-  float deltaRobotX = distance * cos(angleRelatif); // X dans le repère du robot correspond à un déplacement latéral
-  float deltaRobotY = distance * sin(angleRelatif); // Y dans le repère du robot correspond à un déplacement avant
+  float deltaRobotX = distance * cos(angleRelatif);
+  float deltaRobotY = distance * sin(angleRelatif);
+  addLog("[convertAbsoluteToRobotCoordinates] Delta robot X = " + String(deltaRobotX, 2));
+  addLog("[convertAbsoluteToRobotCoordinates] Delta robot Y = " + String(deltaRobotY, 2));
   
   // Créer un point pour les coordonnées relatives au robot
   DeltaXY robotRelativePoint(deltaRobotX, deltaRobotY);
@@ -470,6 +478,9 @@ void loop() {
           // Convertir les coordonnées absolues en coordonnées relatives au robot
           addLog("[wifi] Conversion de coordonnées absolues vers robot");
           DeltaXY absolutePoint(robotState.x + dx, robotState.y + dy);
+          addLog("[wifi] Point robot: " + String(robotState.x, 2) + ", " + String(robotState.y, 2));
+          addLog("[wifi] Point absolu: " + String(absolutePoint.x, 2) + ", " + String(absolutePoint.y, 2));
+
           DeltaXY robotCoord = convertAbsoluteToRobotCoordinates(absolutePoint, robotState);
           // Démarrer le mouvement avec les coordonnées relatives
           demarer(robotCoord.x, robotCoord.y);
