@@ -127,7 +127,7 @@ RobotState calculerNouvellePosition(WheelDistances distances) {
   float angle = robotState.theta + angleRelatif;
   
   // Mise à jour de la position du robot en fonction de son orientation
-  newState.x = robotState.x + deplacementAxeRobot * cos(robotState.theta) + deplacementLatéral * sin(robotState.theta + PI/2); // Attention à cos sin et au + -
+  newState.x = robotState.x + deplacementAxeRobot * cos(robotState.theta) + deplacementLatéral * (-sin(robotState.theta + PI/2)); // Attention à cos sin et au + -
   newState.y = robotState.y + deplacementAxeRobot * sin(robotState.theta) + deplacementLatéral * cos(robotState.theta + PI/2); // Attention à cos sin et au + -
   
   // Mise à jour de l'angle du robot
@@ -145,19 +145,12 @@ RobotState calculerNouvellePosition(WheelDistances distances) {
 // Fonction pour convertir les coordonnées absolues en coordonnées relatives au robot
 // Utilise une transformation en coordonnées cylindriques/polaires
 DeltaXY convertAbsoluteToRobotCoordinates(DeltaXY targetPoint, RobotState robotState) {
-  addLog("[convertCoords] Début de la conversion de coordonnées absolues en relatives");
-  
-  // Vérifier si le déplacement demandé est trop petit
-  if (abs(targetPoint.x) < 0.001 && abs(targetPoint.y) < 0.001) {
-    addLog("[convertCoords] Déplacement trop petit, évitement de division par zéro");
-    return DeltaXY(0, 0);
-  }
-  
-  // 1. Convertir les coordonnées absolues en coordonnées polaires
-  float distance = sqrt(targetPoint.x * targetPoint.x + targetPoint.y * targetPoint.y);
-  float angle = atan2(targetPoint.y, targetPoint.x); // Angle par rapport à l'axe X
-  
-  // 2. Ajuster l'angle en fonction de l'orientation du robot
+
+  float deltaX = targetPoint.x - robotState.x;
+  float deltaY = targetPoint.y - robotState.y;
+  float distance = sqrt(deltaX * deltaX + deltaY * deltaY);
+
+  float angle = atan2(deltaY, deltaX); // Angle par rapport à l'axe X
   float angleRelatif = angle - robotState.theta;
   
   // 3. Reconvertir en coordonnées cartésiennes relatives au robot
@@ -167,12 +160,6 @@ DeltaXY convertAbsoluteToRobotCoordinates(DeltaXY targetPoint, RobotState robotS
   // Créer un point pour les coordonnées relatives au robot
   DeltaXY robotRelativePoint(deltaRobotX, deltaRobotY);
   
-  // Afficher les valeurs pour débogage
-  addLog("[convertCoords] Absolue (" + String(targetPoint.x, 2) + "," + String(targetPoint.y, 2) + ") -> " +
-         "Distance=" + String(distance, 2) + "cm, Angle=" + String(angle * 180.0 / PI, 1) + "°");
-  addLog("[convertCoords] Angle relatif: " + String(angleRelatif * 180.0 / PI, 1) + "° -> Robot (" + 
-         String(robotRelativePoint.x, 2) + "," + String(robotRelativePoint.y, 2) + ")");
-         
   // Retourner les coordonnées relatives au robot
   return robotRelativePoint;
 }
