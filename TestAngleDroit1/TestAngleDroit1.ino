@@ -116,21 +116,26 @@ RobotState calculerNouvellePosition(WheelDistances distances) {
   // Préparer la structure RobotState à renvoyer
   RobotState newState(robotState.x, robotState.y, robotState.theta);
   
-  // Calcul de l'angle relatif basé sur la différence des distances des roues
+  // Calcul de la distance moyenne parcourue par les deux roues
+  float distance = (distances.left + distances.right) / 2.0;
+  
+  // Calcul de la différence entre les distances des roues
   float deltaRoues = distances.left - distances.right;
-  float angleRelatif = atan(deltaRoues / (LARGEUR_ROBOT));
+  
+  // Calcul de l'angle relatif avec atan2 au lieu de atan
+  float angleRelatif = atan2(deltaRoues, LARGEUR_ROBOT);
   
   addLog("[calculerNouvellePosition] Robot theta avant: " + String(robotState.theta * 180.0 / PI, 1) + "°");
   
-  // Calcul du déplacement moyen pour la position
-  float deltaMoyen = (distances.left + distances.right) / 2.0;
+  // Calcul de l'angle absolu
+  float angle = robotState.theta + angleRelatif;
   
   // Mise à jour de la position du robot en fonction de son orientation
-  newState.x = robotState.x + deltaMoyen * cos(robotState.theta + angleRelatif/2.0);
-  newState.y = robotState.y + deltaMoyen * sin(robotState.theta + angleRelatif/2.0);
+  newState.x = robotState.x + distance * cos(angle);
+  newState.y = robotState.y + distance * sin(angle);
   
   // Mise à jour de l'angle du robot
-  newState.theta = robotState.theta + angleRelatif;
+  newState.theta = angle;
   
   // Normaliser l'angle entre -PI et PI
   while (newState.theta > PI) newState.theta -= 2*PI;
