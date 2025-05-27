@@ -165,7 +165,7 @@ RobotState calculerNouvellePositionReelle(int tickLeft, int tickRight) {
   float deplacementLatéral = LONGUEUR_ROBOT * sin(angleRelatif);
   
   // Calcul de l'angle absolu
-  float angle = robotState.theta + angleRelatif;
+  float angle = robotState.theta - angleRelatif;
   
   // Mise à jour de la position du robot en fonction de son orientation
   newState.x = robotState.x + deplacementAxeRobot * cos(robotState.theta) + deplacementLatéral * sin(robotState.theta); // Attention à cos sin et au + -
