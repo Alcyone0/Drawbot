@@ -36,7 +36,7 @@ bool deplacementFait = true; // Set to true initially to prevent movement until 
 
 /* ===== PARAMÈTRES ===== */
 const float IMPULSIONS_PAR_CM = 34.0;
-const int   PWM_MIN = 90;
+const int   PWM_MIN = 100;
 const int   PWM_MAX = 110;
 const float DIST_STYLO_CM = 13.0;
 const float LARGEUR_ROBOT = 8.5/2;
@@ -376,7 +376,7 @@ void loop() {
   }
   
   // Ne traiter les requêtes WiFi que si le robot n'est pas en train de se déplacer
-  if (deplacementFait) {
+  //if (deplacementFait) {
     WiFiClient client = server.available();
     if (client) {
       while (!client.available()) delay(1);
@@ -576,13 +576,13 @@ void loop() {
       html += "<p>Déplacement relatif au robot de 0,1 cm</p>";
       html += "<div style='display:grid; grid-template-columns:1fr 1fr 1fr; max-width:200px; margin:0 auto; gap:5px;'>";
       html += "<div></div>";
-      html += "<a href='/?dx=0&dy=0.1&type=direct&submit=1' style='background:#2196F3; color:white; padding:10px; border-radius:5px; text-decoration:none; text-align:center;'>AVANT</a>";
+      html += "<a href='/?dx=0.1&dy=0&type=direct&submit=1' style='background:#2196F3; color:white; padding:10px; border-radius:5px; text-decoration:none; text-align:center;'>AVANT</a>";
       html += "<div></div>";
-      html += "<a href='/?dx=-0.1&dy=0&type=direct&submit=1' style='background:#2196F3; color:white; padding:10px; border-radius:5px; text-decoration:none; text-align:center;'>GAUCHE</a>";
+      html += "<a href='/?dx=0&dy=0.1&type=direct&submit=1' style='background:#2196F3; color:white; padding:10px; border-radius:5px; text-decoration:none; text-align:center;'>GAUCHE</a>";
       html += "<div style='background:#ddd; color:#666; padding:5px; border-radius:5px; text-align:center;'>+0,1</div>";
-      html += "<a href='/?dx=0.1&dy=0&type=direct&submit=1' style='background:#2196F3; color:white; padding:10px; border-radius:5px; text-decoration:none; text-align:center;'>DROITE</a>";
+      html += "<a href='/?dx=0&dy=-0.1&type=direct&submit=1' style='background:#2196F3; color:white; padding:10px; border-radius:5px; text-decoration:none; text-align:center;'>DROITE</a>";
       html += "<div></div>";
-      html += "<a href='/?dx=0&dy=-0.1&type=direct&submit=1' style='background:#2196F3; color:white; padding:10px; border-radius:5px; text-decoration:none; text-align:center;'>ARRIÈRE</a>";
+      html += "<a href='/?dx=-0.1&dy=0&type=direct&submit=1' style='background:#2196F3; color:white; padding:10px; border-radius:5px; text-decoration:none; text-align:center;'>ARRI\u00c8RE</a>";
       html += "<div></div>";
       html += "</div>"; // Fin de la grille
       
@@ -598,31 +598,31 @@ void loop() {
       html += "</div>"; // Fin du conteneur des boutons directionnels relatifs
       
       // Ajouter le bouton pour la séquence automatique (carré)
-      html += "<div style='margin-top:20px; margin-bottom:20px;'>";
-      html += "<h2>Séquence Automatique</h2>";
-      html += "<p>Dessiner un carré : 10 pas à droite, 10 pas en haut, 10 pas à droite</p>";
-      html += "<a href='/?sequence=1&submit=1' style='background:#FF5722; color:white; padding:15px 30px; border-radius:5px; text-decoration:none; display:inline-block; margin:10px; font-weight:bold;'>Lancer la séquence</a>";
-      html += sequenceEnCours ? "<p><strong>Séquence en cours : Étape " + String(etapeSequence) + "/" + String(ETAPES_SEQUENCE_MAX) + "</strong></p>" : "";
-      html += "</div>"; // Fin du conteneur pour la séquence automatique
+      // html += "<div style='margin-top:20px; margin-bottom:20px;'>";
+      // html += "<h2>Séquence Automatique</h2>";
+      // html += "<p>Dessiner un carré : 10 pas à droite, 10 pas en haut, 10 pas à droite</p>";
+      // html += "<a href='/?sequence=1&submit=1' style='background:#FF5722; color:white; padding:15px 30px; border-radius:5px; text-decoration:none; display:inline-block; margin:10px; font-weight:bold;'>Lancer la séquence</a>";
+      // html += sequenceEnCours ? "<p><strong>Séquence en cours : Étape " + String(etapeSequence) + "/" + String(ETAPES_SEQUENCE_MAX) + "</strong></p>" : "";
+      // html += "</div>"; // Fin du conteneur pour la séquence automatique
       
       // Ajouter une section de test de coordonnées absolues
-      html += "<div style='margin-top:20px; margin-bottom:20px;'>";
-      html += "<h2>Test de Coordonnées</h2>";
-      html += "<p>Vérifier si le robot atteint les coordonnées indiquées</p>";
-      html += "<form action='/' method='get' style='background:#e3f2fd;'>";
-      html += "<div class='input-group'>";
-      html += "<label for='target_x'>Coordonnée X (cm):</label>";
-      html += "<input type='number' step='0.1' name='target_x' id='target_x' value='0' required>";
-      html += "</div>";
-      html += "<div class='input-group'>";
-      html += "<label for='target_y'>Coordonnée Y (cm):</label>";
-      html += "<input type='number' step='0.1' name='target_y' id='target_y' value='0' required>";
-      html += "</div>";
-      html += "<input type='hidden' name='submit' value='1'>";
-      html += "<input type='submit' value='Aller à cette position' style='background:#2196F3;'>";
-      html += "</form>";
-      html += "<p><strong>Position actuelle: X=" + String(robotState.x, 2) + " cm, Y=" + String(robotState.y, 2) + " cm</strong></p>";
-      html += "</div>"; // Fin du conteneur pour le test de coordonnées
+      // html += "<div style='margin-top:20px; margin-bottom:20px;'>";
+      // html += "<h2>Test de Coordonnées</h2>";
+      // html += "<p>Vérifier si le robot atteint les coordonnées indiquées</p>";
+      // html += "<form action='/' method='get' style='background:#e3f2fd;'>";
+      // html += "<div class='input-group'>";
+      // html += "<label for='target_x'>Coordonnée X (cm):</label>";
+      // html += "<input type='number' step='0.1' name='target_x' id='target_x' value='0' required>";
+      // html += "</div>";
+      // html += "<div class='input-group'>";
+      // html += "<label for='target_y'>Coordonnée Y (cm):</label>";
+      // html += "<input type='number' step='0.1' name='target_y' id='target_y' value='0' required>";
+      // html += "</div>";
+      // html += "<input type='hidden' name='submit' value='1'>";
+      // html += "<input type='submit' value='Aller à cette position' style='background:#2196F3;'>";
+      // html += "</form>";
+      // html += "<p><strong>Position actuelle: X=" + String(robotState.x, 2) + " cm, Y=" + String(robotState.y, 2) + " cm</strong></p>";
+      // html += "</div>"; // Fin du conteneur pour le test de coordonnées
       
       // Ajouter le bouton de réinitialisation (reset)
       html += "<div style='margin-top:20px; margin-bottom:20px;'>";
@@ -644,7 +644,7 @@ void loop() {
       delay(1);
       client.stop();
     }
-  }
+  //}
 
   // Vérifier si un mouvement est en cours
   if (correctionActive && !deplacementFait) {
