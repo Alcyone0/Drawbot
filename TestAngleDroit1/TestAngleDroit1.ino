@@ -97,12 +97,12 @@ void calibrerGyro()
 }
 
 // Calcule les distances des deux roues en fonction du déplacement demandé et met à jour la position du robot
-WheelDistances calculerDistancesRoues(DeltaXY robotRelativePoint) {
+WheelDistances calculerDistancesRoues(float deltaX, float deltaY) {
   WheelDistances distances;
-  distances.left = robotRelativePoint.y + (LARGEUR_ROBOT / LONGUEUR_ROBOT) * robotRelativePoint.x;
-  distances.right = robotRelativePoint.y - (LARGEUR_ROBOT / LONGUEUR_ROBOT) * robotRelativePoint.x;  
+  distances.left = deltaX + (LARGEUR_ROBOT / LONGUEUR_ROBOT) * deltaY;
+  distances.right = deltaX - (LARGEUR_ROBOT / LONGUEUR_ROBOT) * deltaY;  
 
-  addLog("[calculerDistancesRoues] Distances roues: " + String(distances.left, 1) + " cm, " + String(distances.right, 1) + " cm");
+  addLog("[calculerDistancesRoues] Distances roues: G=" + String(distances.left, 1) + " cm, D=" + String(distances.right, 1) + " cm");
 
   return distances;
 }
@@ -207,16 +207,13 @@ String getAllLogs() {
 void demarer(float deltaX, float deltaY) {
   addLog("[demarer] DX=" + String(deltaX) + ", DY=" + String(deltaY));
   // Vérifier si les valeurs sont zéro
-  if (abs(deltaX) < 0.01 && abs(deltaY) < 0.01) {
+  if (abs(deltaX) < 0.05 && abs(deltaY) < 0.05) {
     addLog("[demarer] Valeurs trop petites, pas de mouvement");
     return;
   }
-
-  // Créer une structure DeltaXY pour les coordonnées relatives
-  DeltaXY robotRelativePoint(deltaX, deltaY);
   
   // Calculer les distances pour chaque roue avec la nouvelle fonction
-  WheelDistances distances = calculerDistancesRoues(robotRelativePoint);
+  WheelDistances distances = calculerDistancesRoues(deltaX, deltaY);
   distance_en_cm_roue_gauche = distances.left;
   distance_en_cm_roue_droite = distances.right;
   
