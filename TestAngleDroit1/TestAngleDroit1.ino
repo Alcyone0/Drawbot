@@ -4,6 +4,7 @@
 #include <math.h>
 #include "RobotStructures.h"
 #include "Sequences.h"
+#include "logger.h"
 
 /* ===== IMU ===== */
 LSM6DS3 imu(I2C_MODE, 0x6B);
@@ -31,8 +32,7 @@ bool deplacementFait = true; // Set to true initially to prevent movement until 
 const float IMPULSIONS_PAR_CM = 34.0;
 const int   PWM_MIN = 80;
 const int   PWM_MAX = 110;
-const float DIST_STYLO_CM = 13.0;
-const float LARGEUR_ROBOT = 8.5/2;
+const float LARGEUR_ROBOT = 8.5/2; // Distance entre l'axe des roue et une roues
 const float LONGUEUR_ROBOT = 13.0; // Distance entre l'axe des roues et le stylo
 
 /* ===== VARIABLES INTERNES ===== */
@@ -68,9 +68,7 @@ void executerSequenceCercle(); // Déclaration pour la séquence de cercle
 RobotState robotState;  // Position et orientation du robot
 
 /* ===== LOGS ===== */
-const int MAX_LOGS = 100; // Augmentation significative du nombre de logs conservés
-String logs[MAX_LOGS];
-int logIndex = 0;
+// Moved to logger.cpp
 
 /* === UTILS === */
 void countLeftEncoder()  { countLeft++; }
@@ -170,44 +168,7 @@ DeltaXY convertAbsoluteToRobotCoordinates(DeltaXY targetPoint, RobotState robotS
   return robotRelativePoint;
 }
 
-void addLog(String message) {
-  // Ajouter l'horodatage
-  unsigned long ms = millis();
-  String logMessage = String(ms) + "ms: " + message;
-  
-  // Enregistrer dans le tableau circulaire
-  logs[logIndex] = logMessage;
-  logIndex = (logIndex + 1) % MAX_LOGS;
-  
-  // Afficher aussi sur le moniteur série
-  Serial.println(logMessage);
-}
-
-String getAllLogs() {
-  String allLogs = "";
-  int count = 0;
-  
-  // Trouver le plus ancien log (non vide)
-  int startIdx = logIndex;
-  for (int i = 0; i < MAX_LOGS; i++) {
-    int idx = (logIndex + i) % MAX_LOGS;
-    if (logs[idx].length() == 0) {
-      startIdx = (idx + 1) % MAX_LOGS;
-      break;
-    }
-  }
-  
-  // Parcourir les logs à partir du plus ancien vers le plus récent
-  for (int i = 0; i < MAX_LOGS; i++) {
-    int idx = (startIdx + i) % MAX_LOGS;
-    if (logs[idx].length() > 0 && idx != logIndex) {
-      allLogs += logs[idx] + "<br>";
-      count++;
-    }
-  }
-  
-  return allLogs.length() > 0 ? allLogs : "Aucun log disponible";
-}
+// Logging functions moved to logger.cpp
 
 // Fonction pour démarrer le mouvement du robot
 void demarer(float deltaX, float deltaY) {
@@ -336,6 +297,7 @@ void setup()
 {
   Serial.begin(115200);
   delay(1000);
+  setupLogger();
   addLog("[setup] Drawbot démarré");
   addLog("[setup] Position initiale: X=0.0, Y=0.0, Theta=0.0°");
 

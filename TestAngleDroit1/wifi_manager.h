@@ -3,6 +3,7 @@
 
 #include <WiFi.h>
 #include "RobotStructures.h"
+#include "logger.h"
 
 void setupWiFi();
 void handleWiFiClient();
