@@ -257,40 +257,7 @@ void demarer(float deltaX, float deltaY) {
   addLog("[demarer] Nouvelle position robot: X=" + String(robotState.x, 1) + " cm, Y=" + String(robotState.y, 1) + " cm");
 } 
 
-bool avancerCorrige() {
-  // Configurer la direction des moteurs en fonction des valeurs calculées
-  if (directionAvantDroite) {
-    digitalWrite(IN_1_D, LOW); digitalWrite(IN_2_D, HIGH);
-  } else {
-    digitalWrite(IN_1_D, HIGH); digitalWrite(IN_2_D, LOW);
-  }
-  
-  if (directionAvantGauche) {
-    digitalWrite(IN_1_G, HIGH); digitalWrite(IN_2_G, LOW);
-  } else {
-    digitalWrite(IN_1_G, LOW); digitalWrite(IN_2_G, HIGH);
-  }
-  
-  int erreurGauche = seuilImpulsionsRoueGauche - countLeft;
-  int erreurDroite = seuilImpulsionsRoueDroite - countRight;
-
-  float Kp = 10;
-  int correctionGauche = Kp * erreurGauche;
-  int correctionDroite = Kp * erreurDroite;
-
-  int pwmD = constrain(PWM_MIN + correctionDroite,PWM_MIN , PWM_MAX);
-  int pwmG = constrain(PWM_MIN + correctionGauche, PWM_MIN, PWM_MAX);
-
-  analogWrite(EN_D, pwmD);
-  analogWrite(EN_G, pwmG);
-
-  bool fini = (countLeft >= seuilImpulsionsRoueGauche) && (countRight >= seuilImpulsionsRoueDroite);
-  if (fini) {
-    addLog("[avancerCorrige] Déplacement terminé");
-  }
-  return fini;
-}
-
+// La fonction executerSequenceAutomatique a été déplacée dans le fichier Sequences.h
 
 // Fonction pour réinitialiser la position et l'orientation du robot
 void resetRobot() {
@@ -317,6 +284,40 @@ void resetRobot() {
   
   addLog("[reset] Position et orientation réinitialisées à zéro");
   addLog("[reset] X=0.0, Y=0.0, Theta=0.0°");
+}
+
+bool avancerCorrige() {
+  // Configurer la direction des moteurs en fonction des valeurs calculées
+  if (directionAvantDroite) {
+    digitalWrite(IN_1_D, HIGH); digitalWrite(IN_2_D, LOW);
+  } else {
+    digitalWrite(IN_1_D, LOW); digitalWrite(IN_2_D, HIGH);
+  }
+  
+  if (directionAvantGauche) {
+    digitalWrite(IN_1_G, LOW); digitalWrite(IN_2_G, HIGH);
+  } else {
+    digitalWrite(IN_1_G, HIGH); digitalWrite(IN_2_G, LOW);
+  }
+  
+  int erreurGauche = seuilImpulsionsRoueGauche - countLeft;
+  int erreurDroite = seuilImpulsionsRoueDroite - countRight;
+
+  float Kp = 10;
+  int correctionGauche = Kp * erreurGauche;
+  int correctionDroite = Kp * erreurDroite;
+
+  int pwmD = constrain(PWM_MIN + correctionDroite,PWM_MIN , PWM_MAX);
+  int pwmG = constrain(PWM_MIN + correctionGauche, PWM_MIN, PWM_MAX);
+
+  analogWrite(EN_D, pwmD);
+  analogWrite(EN_G, pwmG);
+
+  bool fini = (countLeft >= seuilImpulsionsRoueGauche) && (countRight >= seuilImpulsionsRoueDroite);
+  if (fini) {
+    addLog("[avancerCorrige] Déplacement terminé");
+  }
+  return fini;
 }
 
 void setup()
@@ -593,32 +594,34 @@ void loop() {
       
       html += "</div>"; // Fin du conteneur des boutons directionnels relatifs
       
+      /**
       // Ajouter le bouton pour la séquence automatique (carré)
-      // html += "<div style='margin-top:20px; margin-bottom:20px;'>";
-      // html += "<h2>Séquence Automatique</h2>";
-      // html += "<p>Dessiner un carré : 10 pas à droite, 10 pas en haut, 10 pas à droite</p>";
-      // html += "<a href='/?sequence=1&submit=1' style='background:#FF5722; color:white; padding:15px 30px; border-radius:5px; text-decoration:none; display:inline-block; margin:10px; font-weight:bold;'>Lancer la séquence</a>";
-      // html += sequenceEnCours ? "<p><strong>Séquence en cours : Étape " + String(etapeSequence) + "/" + String(ETAPES_SEQUENCE_MAX) + "</strong></p>" : "";
-      // html += "</div>"; // Fin du conteneur pour la séquence automatique
+      html += "<div style='margin-top:20px; margin-bottom:20px;'>";
+      html += "<h2>Séquence Automatique</h2>";
+      html += "<p>Dessiner un carré : 10 pas à droite, 10 pas en haut, 10 pas à droite</p>";
+      html += "<a href='/?sequence=1&submit=1' style='background:#FF5722; color:white; padding:15px 30px; border-radius:5px; text-decoration:none; display:inline-block; margin:10px; font-weight:bold;'>Lancer la séquence</a>";
+      html += sequenceEnCours ? "<p><strong>Séquence en cours : Étape " + String(etapeSequence) + "/" + String(ETAPES_SEQUENCE_MAX) + "</strong></p>" : "";
+      html += "</div>"; // Fin du conteneur pour la séquence automatique
       
       // Ajouter une section de test de coordonnées absolues
-      // html += "<div style='margin-top:20px; margin-bottom:20px;'>";
-      // html += "<h2>Test de Coordonnées</h2>";
-      // html += "<p>Vérifier si le robot atteint les coordonnées indiquées</p>";
-      // html += "<form action='/' method='get' style='background:#e3f2fd;'>";
-      // html += "<div class='input-group'>";
-      // html += "<label for='target_x'>Coordonnée X (cm):</label>";
-      // html += "<input type='number' step='0.1' name='target_x' id='target_x' value='0' required>";
-      // html += "</div>";
-      // html += "<div class='input-group'>";
-      // html += "<label for='target_y'>Coordonnée Y (cm):</label>";
-      // html += "<input type='number' step='0.1' name='target_y' id='target_y' value='0' required>";
-      // html += "</div>";
-      // html += "<input type='hidden' name='submit' value='1'>";
-      // html += "<input type='submit' value='Aller à cette position' style='background:#2196F3;'>";
-      // html += "</form>";
-      // html += "<p><strong>Position actuelle: X=" + String(robotState.x, 2) + " cm, Y=" + String(robotState.y, 2) + " cm</strong></p>";
-      // html += "</div>"; // Fin du conteneur pour le test de coordonnées
+      html += "<div style='margin-top:20px; margin-bottom:20px;'>";
+      html += "<h2>Test de Coordonnées</h2>";
+      html += "<p>Vérifier si le robot atteint les coordonnées indiquées</p>";
+      html += "<form action='/' method='get' style='background:#e3f2fd;'>";
+      html += "<div class='input-group'>";
+      html += "<label for='target_x'>Coordonnée X (cm):</label>";
+      html += "<input type='number' step='0.1' name='target_x' id='target_x' value='0' required>";
+      html += "</div>";
+      html += "<div class='input-group'>";
+      html += "<label for='target_y'>Coordonnée Y (cm):</label>";
+      html += "<input type='number' step='0.1' name='target_y' id='target_y' value='0' required>";
+      html += "</div>";
+      html += "<input type='hidden' name='submit' value='1'>";
+      html += "<input type='submit' value='Aller à cette position' style='background:#2196F3;'>";
+      html += "</form>";
+      html += "<p><strong>Position actuelle: X=" + String(robotState.x, 2) + " cm, Y=" + String(robotState.y, 2) + " cm</strong></p>";
+      html += "</div>"; // Fin du conteneur pour le test de coordonnées
+      **/
       
       // Ajouter le bouton de réinitialisation (reset)
       html += "<div style='margin-top:20px; margin-bottom:20px;'>";
