@@ -190,7 +190,7 @@ DeltaXY convertAbsoluteToRobotCoordinates(DeltaXY targetPoint, RobotState robotS
   float distance = sqrt(deltaX * deltaX + deltaY * deltaY);
 
   float angle = atan2(deltaY, deltaX); // Angle par rapport à l'axe X
-  float angleRelatif = angle - robotState.theta;
+  float angleRelatif = robotState.theta - angle;
   
   // 3. Reconvertir en coordonnées cartésiennes relatives au robot
   float deltaRobotX = distance * cos(angleRelatif); // X dans le repère du robot correspond à un déplacement latéral
