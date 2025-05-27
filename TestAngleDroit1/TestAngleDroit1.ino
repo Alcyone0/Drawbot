@@ -516,10 +516,6 @@ void loop() {
       html += "<div style='background:#f8f8f8;padding:5px;border-radius:5px;margin-bottom:10px;font-size:0.8em;text-align:right;'>";
       html += "Compilé le " + String(COMPILE_DATE) + " à " + String(COMPILE_TIME);
       html += "</div>";
-      html += "<div style='background:#fff;padding:10px;border-radius:10px;margin-bottom:15px;'><strong>Position: </strong>";
-      html += "X: " + String(robotState.x, 1) + " cm, ";
-      html += "Y: " + String(robotState.y, 1) + " cm, ";
-      html += "Angle: " + String(robotState.theta * 180.0 / PI, 1) + "° </div>";
       
       // Ajouter les boutons directionnels pour déplacement rapide de 0,1 cm
       html += "<div style='margin-top:20px; margin-bottom:20px;'>";
