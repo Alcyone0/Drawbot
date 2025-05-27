@@ -257,7 +257,40 @@ void demarer(float deltaX, float deltaY) {
   addLog("[demarer] Nouvelle position robot: X=" + String(robotState.x, 1) + " cm, Y=" + String(robotState.y, 1) + " cm");
 } 
 
-// La fonction executerSequenceAutomatique a été déplacée dans le fichier Sequences.h
+bool avancerCorrige() {
+  // Configurer la direction des moteurs en fonction des valeurs calculées
+  if (directionAvantDroite) {
+    digitalWrite(IN_1_D, LOW); digitalWrite(IN_2_D, HIGH);
+  } else {
+    digitalWrite(IN_1_D, HIGH); digitalWrite(IN_2_D, LOW);
+  }
+  
+  if (directionAvantGauche) {
+    digitalWrite(IN_1_G, HIGH); digitalWrite(IN_2_G, LOW);
+  } else {
+    digitalWrite(IN_1_G, LOW); digitalWrite(IN_2_G, HIGH);
+  }
+  
+  int erreurGauche = seuilImpulsionsRoueGauche - countLeft;
+  int erreurDroite = seuilImpulsionsRoueDroite - countRight;
+
+  float Kp = 10;
+  int correctionGauche = Kp * erreurGauche;
+  int correctionDroite = Kp * erreurDroite;
+
+  int pwmD = constrain(PWM_MIN + correctionDroite,PWM_MIN , PWM_MAX);
+  int pwmG = constrain(PWM_MIN + correctionGauche, PWM_MIN, PWM_MAX);
+
+  analogWrite(EN_D, pwmD);
+  analogWrite(EN_G, pwmG);
+
+  bool fini = (countLeft >= seuilImpulsionsRoueGauche) && (countRight >= seuilImpulsionsRoueDroite);
+  if (fini) {
+    addLog("[avancerCorrige] Déplacement terminé");
+  }
+  return fini;
+}
+
 
 // Fonction pour réinitialiser la position et l'orientation du robot
 void resetRobot() {
@@ -284,40 +317,6 @@ void resetRobot() {
   
   addLog("[reset] Position et orientation réinitialisées à zéro");
   addLog("[reset] X=0.0, Y=0.0, Theta=0.0°");
-}
-
-bool avancerCorrige() {
-  // Configurer la direction des moteurs en fonction des valeurs calculées
-  if (directionAvantDroite) {
-    digitalWrite(IN_1_D, HIGH); digitalWrite(IN_2_D, LOW);
-  } else {
-    digitalWrite(IN_1_D, LOW); digitalWrite(IN_2_D, HIGH);
-  }
-  
-  if (directionAvantGauche) {
-    digitalWrite(IN_1_G, LOW); digitalWrite(IN_2_G, HIGH);
-  } else {
-    digitalWrite(IN_1_G, HIGH); digitalWrite(IN_2_G, LOW);
-  }
-  
-  int erreurGauche = seuilImpulsionsRoueGauche - countLeft;
-  int erreurDroite = seuilImpulsionsRoueDroite - countRight;
-
-  float Kp = 10;
-  int correctionGauche = Kp * erreurGauche;
-  int correctionDroite = Kp * erreurDroite;
-
-  int pwmD = constrain(PWM_MIN + correctionDroite,PWM_MIN , PWM_MAX);
-  int pwmG = constrain(PWM_MIN + correctionGauche, PWM_MIN, PWM_MAX);
-
-  analogWrite(EN_D, pwmD);
-  analogWrite(EN_G, pwmG);
-
-  bool fini = (countLeft >= seuilImpulsionsRoueGauche) && (countRight >= seuilImpulsionsRoueDroite);
-  if (fini) {
-    addLog("[avancerCorrige] Déplacement terminé");
-  }
-  return fini;
 }
 
 void setup()
