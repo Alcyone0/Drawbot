@@ -184,7 +184,6 @@ RobotState calculerNouvellePositionReelle(int tickLeft, int tickRight) {
 // Fonction pour convertir les coordonnées absolues en coordonnées relatives au robot
 // Utilise une transformation en coordonnées cylindriques/polaires
 DeltaXY convertAbsoluteToRobotCoordinates(DeltaXY targetPoint, RobotState robotState) {
-
   float deltaX = targetPoint.x - robotState.x;
   float deltaY = targetPoint.y - robotState.y;
   float distance = sqrt(deltaX * deltaX + deltaY * deltaY);
@@ -422,54 +421,28 @@ void loop() {
       int posX = request.indexOf("dx=");
       int posY = request.indexOf("dy=");
       int posType = request.indexOf("type=");
-      int posTargetX = request.indexOf("target_x=");
-      int posTargetY = request.indexOf("target_y=");
       
       // Vérifier si c'est une vraie requête de formulaire avec des paramètres
       bool isFormSubmit = false;
       
-      // Nouveau: vérifier le paramètre de soumission explicite
+      // Vérifier le paramètre de soumission explicite
       int posSubmit = request.indexOf("submit=1");
       
-      // Vérifier si la requête contient "GET /?" et le paramètre de soumission
-      if (request.indexOf("GET /?reset=") != -1 && posSubmit != -1) {
+      // Vérifier si la requête contient le paramètre de soumission
+      if (posSubmit != -1) {
         isFormSubmit = true;
-        addLog("[wifi] Formulaire de réinitialisation recu");
-      } else if (request.indexOf("GET /?sequence=") != -1 && posSubmit != -1) {
-        isFormSubmit = true;
-        addLog("[wifi] Formulaire de séquence carré recu");
-
-      } else if (request.indexOf("GET /?dx=") != -1 && posSubmit != -1) {
-        isFormSubmit = true;
-        addLog("[wifi] Formulaire de mouvement recu");
-      } else if (request.indexOf("GET /?target_x=") != -1 && posSubmit != -1) {
-        isFormSubmit = true;
-        addLog("[wifi] Formulaire de test de coordonnées recu");
-      } else if (request.indexOf("GET /?dx=") != -1 || request.indexOf("GET /?sequence=") != -1 ||  request.indexOf("GET /?reset=") != -1 || request.indexOf("GET /?target_x=") != -1) {
+        if (request.indexOf("GET /?reset=") != -1) {
+          addLog("[wifi] Demande de réinitialisation reçue");
+        } else if (request.indexOf("GET /?dx=") != -1) {
+          addLog("[wifi] Demande de déplacement reçue");
+        }
+      } else if (request.indexOf("GET /?dx=") != -1 || request.indexOf("GET /?reset=") != -1) {
         // C'est un rechargement de page avec les paramètres dans l'URL
         addLog("[wifi] Recharge de page détectée, mouvement ignoré");
       }
       
-      // Traiter le formulaire de test de coordonnées absolues
-      if (posTargetX != -1 && posTargetY != -1 && isFormSubmit) {
-        float targetX = request.substring(posTargetX + 9, request.indexOf('&', posTargetX)).toFloat();
-        float targetY = request.substring(posTargetY + 9).toFloat();
-        addLog("[wifi] Test de coordonnées: X=" + String(targetX) + ", Y=" + String(targetY));
-        
-        // Calculer les deltas pour aller de la position actuelle à la position cible
-        float deltaX = targetX - robotState.x;
-        float deltaY = targetY - robotState.y;
-        addLog("[wifi] Deltas calculés: dX=" + String(deltaX) + ", dY=" + String(deltaY));
-        
-        // Convertir en coordonnées relatives au robot
-        DeltaXY absolutePoint(deltaX, deltaY);
-        DeltaXY robotCoord = convertAbsoluteToRobotCoordinates(absolutePoint, robotState);
-        
-        // Démarrer le mouvement
-        demarer(robotCoord.x, robotCoord.y);
-      }
-      // Traiter le formulaire de mouvement standard
-      else if (posX != -1 && posY != -1 && isFormSubmit) {
+      // Traiter les boutons de déplacement
+      if (posX != -1 && posY != -1 && isFormSubmit) {
         // Déterminer le type de coordonnées (absolu, robot, ou direct)
         String coordType = "absolu"; // Par défaut, on considère les coordonnées comme absolues
         
@@ -505,9 +478,7 @@ void loop() {
           demarer(dx, dy);
         }
       } else {
-        // Vérifier si c'est une demande pour lancer la séquence automatique (carré) ou réinitialiser
-        int posSequence = request.indexOf("sequence=1");
-  
+        // Vérifier si c'est une demande pour réinitialiser la position du robot
         int posReset = request.indexOf("reset=1");
         
         if (posReset != -1) {
@@ -521,24 +492,6 @@ void loop() {
             addLog("[wifi] Vérification après réinitialisation: X=" + String(robotState.x) + ", Y=" + String(robotState.y) + ", Theta=" + String(robotState.theta));
           } else {
             addLog("[wifi] Paramètre reset=1 détecté mais formulaire non soumis");
-          }
-        } else if (posSequence != -1) {
-          addLog("[wifi] Détection paramètre sequence=1 à la position " + String(posSequence));
-          if (isFormSubmit) {
-            addLog("[wifi] Demande de démarrage de la séquence automatique confirmée");
-            // Démarrer la séquence si le robot n'est pas déjà en mouvement
-            if (deplacementFait && !sequenceEnCours) {
-              sequenceEnCours = true;
-              etapeSequence = 0;
-              executerProchainMouvement = true;
-              addLog("[wifi] Séquence automatique lancée - variables: sequenceEnCours=" + String(sequenceEnCours) + ", etapeSequence=" + String(etapeSequence));
-              // Exécuter immédiatement la première étape
-              executerSequenceAutomatique();
-            } else {
-              addLog("[wifi] Impossible de démarrer la séquence, robot occupé - deplacementFait=" + String(deplacementFait) + ", sequenceEnCours=" + String(sequenceEnCours));
-            }
-          } else {
-            addLog("[wifi] Paramètre sequence=1 détecté mais formulaire non soumis");
           }
         } else {
           // Si c'est juste un chargement de page sans soumission
@@ -567,27 +520,6 @@ void loop() {
       html += "X: " + String(robotState.x, 1) + " cm, ";
       html += "Y: " + String(robotState.y, 1) + " cm, ";
       html += "Angle: " + String(robotState.theta * 180.0 / PI, 1) + "° </div>";
-      html += "<form action='/' method='get'>";
-      html += "<h2>Commande</h2>";
-      html += "<div class='input-group'>";
-      html += "<label for='dx'>Delta X (cm):</label>";
-      html += "<input type='number' step='0.1' name='dx' id='dx' value='0' required>";
-      html += "</div>";
-      html += "<div class='input-group'>";
-      html += "<label for='dy'>Delta Y (cm):</label>";
-      html += "<input type='number' step='0.1' name='dy' id='dy' value='0' required>";
-      html += "</div>";
-      html += "<div class='input-group'>";
-      html += "<label for='type'>Type de coordonnées:</label>";
-      html += "<select name='type' id='type'>";
-      html += "<option value='absolu' selected>Absolues</option>";
-      html += "<option value='robot'>Relatives au robot</option>";
-      html += "</select>";
-      html += "</div>";
-      // Ajouter un champ caché pour indiquer une soumission explicite du formulaire
-      html += "<input type='hidden' name='submit' value='1'>";
-      html += "<input type='submit' value='Déplacer'>";
-      html += "</form>";
       
       // Ajouter les boutons directionnels pour déplacement rapide de 0,1 cm
       html += "<div style='margin-top:20px; margin-bottom:20px;'>";
