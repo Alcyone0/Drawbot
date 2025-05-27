@@ -36,7 +36,7 @@ bool deplacementFait = true; // Set to true initially to prevent movement until 
 
 /* ===== PARAMÈTRES ===== */
 const float IMPULSIONS_PAR_CM = 34.0;
-const int   PWM_MIN = 100;
+const int   PWM_MIN = 70;
 const int   PWM_MAX = 110;
 const float DIST_STYLO_CM = 13.0;
 const float LARGEUR_ROBOT = 8.5/2;
@@ -99,15 +99,19 @@ void calibrerGyro()
 // Calcule les distances des deux roues en fonction du déplacement demandé et met à jour la position du robot
 WheelDistances calculerDistancesRoues(float deltaX, float deltaY) {
   WheelDistances distances;
-  distances.left = deltaX + (LARGEUR_ROBOT / LONGUEUR_ROBOT) * deltaY;
-  distances.right = deltaX - (LARGEUR_ROBOT / LONGUEUR_ROBOT) * deltaY;  
+  distances.left = deltaX - (LARGEUR_ROBOT / LONGUEUR_ROBOT) * deltaY;
+  distances.right = deltaX + (LARGEUR_ROBOT / LONGUEUR_ROBOT) * deltaY;  
 
   addLog("[calculerDistancesRoues] Distances roues: G=" + String(distances.left, 1) + " cm, D=" + String(distances.right, 1) + " cm");
 
   return distances;
 }
 
-RobotState calculerNouvellePosition(WheelDistances distances) {
+RobotState calculerNouvellePositionTheorique(float distanceLeft, float distanceRight) {
+  WheelDistances distances;
+  distances.left = distanceLeft;
+  distances.right = distanceRight;
+
   // Préparer la structure RobotState à renvoyer
   RobotState newState(robotState.x, robotState.y, robotState.theta);
   
@@ -118,7 +122,44 @@ RobotState calculerNouvellePosition(WheelDistances distances) {
   float deltaRoues = distances.left - distances.right; // Attention au signe
   
   // Calcul de l'angle relatif avec atan2
-  float angleRelatif = atan2(deltaRoues, LARGEUR_ROBOT); // Attention à l'ordre
+  float angleRelatif = atan2(deltaRoues, LARGEUR_ROBOT)/2.; // Attention à l'ordre
+
+  // Déplacement latéral
+  float deplacementLatéral = LONGUEUR_ROBOT * sin(angleRelatif);
+  
+  // Calcul de l'angle absolu
+  float angle = robotState.theta - angleRelatif;
+  
+  // Mise à jour de la position du robot en fonction de son orientation
+  newState.x = robotState.x + deplacementAxeRobot * cos(robotState.theta) + deplacementLatéral * sin(robotState.theta); // Attention à cos sin et au + -
+  newState.y = robotState.y + deplacementAxeRobot * sin(robotState.theta) - deplacementLatéral * cos(robotState.theta); // Attention à cos sin et au + -
+  
+  // Mise à jour de l'angle du robot
+  newState.theta = angle;
+  
+  // Normaliser l'angle entre -PI et PI
+  while (newState.theta > PI) newState.theta -= 2*PI;
+  while (newState.theta < -PI) newState.theta += 2*PI;
+    
+  return newState;
+}
+
+RobotState calculerNouvellePositionReelle(int tickLeft, int tickRight) {
+  WheelDistances distances;
+  distances.left = tickLeft / IMPULSIONS_PAR_CM;
+  distances.right = tickRight / IMPULSIONS_PAR_CM;
+
+  // Préparer la structure RobotState à renvoyer
+  RobotState newState(robotState.x, robotState.y, robotState.theta);
+  
+  // Calcul de la distance moyenne parcourue par les deux roues
+  float deplacementAxeRobot = (distances.left + distances.right) / 2.0;
+
+  // Calcul de la différence entre les distances des roues
+  float deltaRoues = distances.left - distances.right; // Attention au signe
+  
+  // Calcul de l'angle relatif avec atan2
+  float angleRelatif = atan2(deltaRoues, LARGEUR_ROBOT)/2.; // Attention à l'ordre
 
   // Déplacement latéral
   float deplacementLatéral = LONGUEUR_ROBOT * sin(angleRelatif);
@@ -127,8 +168,8 @@ RobotState calculerNouvellePosition(WheelDistances distances) {
   float angle = robotState.theta + angleRelatif;
   
   // Mise à jour de la position du robot en fonction de son orientation
-  newState.x = robotState.x + deplacementAxeRobot * sin(robotState.theta) + deplacementLatéral * (-cos(robotState.theta)); // Attention à cos sin et au + -
-  newState.y = robotState.y + deplacementAxeRobot * cos(robotState.theta) + deplacementLatéral * sin(robotState.theta); // Attention à cos sin et au + -
+  newState.x = robotState.x + deplacementAxeRobot * cos(robotState.theta) + deplacementLatéral * sin(robotState.theta); // Attention à cos sin et au + -
+  newState.y = robotState.y + deplacementAxeRobot * sin(robotState.theta) - deplacementLatéral * cos(robotState.theta); // Attention à cos sin et au + -
   
   // Mise à jour de l'angle du robot
   newState.theta = angle;
@@ -136,9 +177,7 @@ RobotState calculerNouvellePosition(WheelDistances distances) {
   // Normaliser l'angle entre -PI et PI
   while (newState.theta > PI) newState.theta -= 2*PI;
   while (newState.theta < -PI) newState.theta += 2*PI;
-  
-  addLog("[calculerNouvellePosition] Nouvelle position robot: X=" + String(newState.x, 1) + " cm, Y=" + String(newState.y, 1) + " cm"); 
-  
+    
   return newState;
 }
 
@@ -243,6 +282,11 @@ void demarer(float deltaX, float deltaY) {
                   ", Seuil D=" + String(seuilImpulsionsRoueDroite);
   addLog("[demarer] " + logMsg);
   
+
+  // Calculer et mettre à jour la position du robot
+  //robotState = calculerNouvellePositionReelle(countLeft, countRight);
+  robotState = calculerNouvellePositionTheorique(distance_en_cm_roue_gauche, distance_en_cm_roue_droite);
+
   // Réinitialiser les compteurs
   countLeft = 0;
   countRight = 0;
@@ -251,10 +295,6 @@ void demarer(float deltaX, float deltaY) {
   correctionActive = true;
   deplacementFait = false;
   addLog("[demarer] Début du mouvement");
-  
-  // Calculer et mettre à jour la position du robot
-  robotState = calculerNouvellePosition(distances);
-  addLog("[demarer] Nouvelle position robot: X=" + String(robotState.x, 1) + " cm, Y=" + String(robotState.y, 1) + " cm");
 } 
 
 bool avancerCorrige() {
