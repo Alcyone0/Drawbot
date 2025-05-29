@@ -56,7 +56,7 @@ int etapeSequence = 0;
 const int ETAPES_SEQUENCE_MAX = 30; // 10 pas à droite + 10 pas en haut + 10 pas à droite
 bool executerProchainMouvement = true;
 
-
+//----------------------------------------------------------------------------------------------------------------VARIABLES------------------------------------------------------------------
 
 /* ===== PROTOTYPES DE FONCTIONS ===== */
 void demarer(float deltaX, float deltaY); // Déclaration anticipée
@@ -96,6 +96,8 @@ void calibrerGyro()
   biaisGyroZ = somme / N;
 }
 
+//----------------------------------------------------------------------------------------------------------------CALCULER DISTANCES ROUES----------------------------------------------------------
+
 // Calcule les distances des deux roues en fonction du déplacement demandé et met à jour la position du robot
 WheelDistances calculerDistancesRoues(float deltaX, float deltaY) {
   WheelDistances distances;
@@ -106,6 +108,8 @@ WheelDistances calculerDistancesRoues(float deltaX, float deltaY) {
 
   return distances;
 }
+
+//----------------------------------------------------------------------------------------------------------------CALCULER NOUVELLE POSITION THEORIQUE----------------------------------------------------------
 
 RobotState calculerNouvellePositionTheorique(float distanceLeft, float distanceRight) {
   WheelDistances distances;
@@ -144,6 +148,8 @@ RobotState calculerNouvellePositionTheorique(float distanceLeft, float distanceR
   return newState;
 }
 
+//----------------------------------------------------------------------------------------------------------------CALCULER NOUVELLE POSITION REELLE----------------------------------------------------------
+
 RobotState calculerNouvellePositionReelle(int tickLeft, int tickRight) {
   WheelDistances distances;
   distances.left = tickLeft / IMPULSIONS_PAR_CM;
@@ -181,6 +187,8 @@ RobotState calculerNouvellePositionReelle(int tickLeft, int tickRight) {
   return newState;
 }
 
+//----------------------------------------------------------------------------------------------------------------CONVERT ABSOLU RELATIF----------------------------------------------------------
+
 // Fonction pour convertir les coordonnées absolues en coordonnées relatives au robot
 DeltaXY convertAbsoluteToRobotCoordinates(DeltaXY targetPoint, RobotState robotState) {
   float deltaX = targetPoint.x - robotState.x;
@@ -209,6 +217,8 @@ DeltaXY convertAbsoluteToRobotCoordinates(DeltaXY targetPoint, RobotState robotS
   // Retourner les coordonnées relatives au robot
   return robotRelativePoint;
 }
+
+//----------------------------------------------------------------------------------------------------------------ADD LOGS----------------------------------------------------------
 
 void addLog(String message) {
   // Ajouter l'horodatage
@@ -248,6 +258,8 @@ String getAllLogs() {
   
   return allLogs.length() > 0 ? allLogs : "Aucun log disponible";
 }
+
+//----------------------------------------------------------------------------------------------------------------DEMARRER MOUVEMENT----------------------------------------------------------
 
 // Fonction pour démarrer le mouvement du robot
 void demarer(float deltaX, float deltaY) {
@@ -298,11 +310,18 @@ void demarer(float deltaX, float deltaY) {
   countLeft = 0;
   countRight = 0;
   
+  // Désactiver le WiFi pendant le déplacement
+  WiFi.disconnect();
+  server.end();
+  addLog("[demarer] WiFi désactivé pendant le déplacement");
+  
   // Activer le mouvement
   correctionActive = true;
   deplacementFait = false;
   addLog("[demarer] Début du mouvement");
 } 
+
+//----------------------------------------------------------------------------------------------------------------AVANCER CORRIGE----------------------------------------------------------
 
 bool avancerCorrige() {
   // Configurer la direction des moteurs en fonction des valeurs calculées
@@ -334,10 +353,17 @@ bool avancerCorrige() {
   bool fini = (countLeft >= seuilImpulsionsRoueGauche) && (countRight >= seuilImpulsionsRoueDroite);
   if (fini) {
     addLog("[avancerCorrige] Déplacement terminé");
+    
+    // Réactiver le WiFi après le déplacement
+    WiFi.softAP(ssid, password);
+    server.begin();
+    String ipAddress = WiFi.softAPIP().toString();
+    addLog("[avancerCorrige] WiFi réactivé - IP: " + ipAddress);
   }
   return fini;
 }
 
+//----------------------------------------------------------------------------------------------------------------RESET ROBOT----------------------------------------------------------
 
 // Fonction pour réinitialiser la position et l'orientation du robot
 void resetRobot() {
@@ -365,6 +391,8 @@ void resetRobot() {
   addLog("[reset] Position et orientation réinitialisées à zéro");
   addLog("[reset] X=0.0, Y=0.0, Theta=0.0°");
 }
+
+//----------------------------------------------------------------------------------------------------------------SETUP----------------------------------------------------------
 
 void setup()
 {
@@ -401,6 +429,8 @@ void setup()
   // S'assurer que le robot est arrêté au démarrage
   arreter();
 }
+
+//----------------------------------------------------------------------------------------------------------------LOOP----------------------------------------------------------
 
 void loop() {
   // S'assurer que le robot ne bouge pas au démarrage ou après un déplacement
