@@ -4,6 +4,7 @@
 #include <math.h>
 #include "RobotStructures.h"
 #include "Sequences.h"
+#include "PID.h"
 
 /* ===== IMU ===== */
 LSM6DS3 imu(I2C_MODE, 0x6B);
@@ -35,7 +36,7 @@ bool correctionActive = false;
 bool deplacementFait = true; // Set to true initially to prevent movement until WiFi instructions
 
 /* ===== PARAMÈTRES ===== */
-const float IMPULSIONS_PAR_CM = 34.0;
+const float IMPULSIONS_PAR_CM = 54.4;  // Valeur recalibrée (ancienne valeur = 34.0)
 const int   PWM_MIN = 70;       // Valeur d'origine
 const int   PWM_MAX = 110;      // Valeur d'origine
 const float DIST_STYLO_CM = 13.0;
@@ -52,18 +53,28 @@ bool directionAvantGauche = true; // true = avant, false = arrière
 bool directionAvantDroite = true; // true = avant, false = arrière
 
 /* ===== VARIABLES PID ===== */
-// Variables de PID pour la roue gauche
-float Kp_G = 8.0;    // Coefficient proportionnel d'origine
-float Ki_G = 0.01;   // Coefficient intégrateur très faible
-float Kd_G = 0.5;    // Coefficient dérivé modéré
-float erreurSommeGauche = 0.0;   // Somme des erreurs (pour le terme intégrateur)
-float erreurPrecedenteGauche = 0.0;  // Erreur précédente (pour le terme dérivé)
-// Variables de PID pour la roue droite
-float Kp_D = 8.0;    // Coefficient proportionnel d'origine
-float Ki_D = 0.01;   // Coefficient intégrateur très faible
-float Kd_D = 0.5;    // Coefficient dérivé modéré
-float erreurSommeDroite = 0.0;   // Somme des erreurs (pour le terme intégrateur)
-float erreurPrecedenteDroite = 0.0;  // Erreur précédente (pour le terme dérivé)
+// Paramètres de PID améliorés
+double Kp_G = 8.0;    // Coefficient proportionnel roue gauche
+double Ki_G = 0.1;    // Coefficient intégrateur roue gauche
+double Kd_G = 0.5;    // Coefficient dérivé roue gauche
+
+double Kp_D = 8.0;    // Coefficient proportionnel roue droite
+double Ki_D = 0.1;    // Coefficient intégrateur roue droite
+double Kd_D = 0.5;    // Coefficient dérivé roue droite
+
+// Variables pour le nouveau PID
+double inputGauche = 0.0;   // Valeur actuelle - impulsions roue gauche
+double outputGauche = 0.0;  // Sortie calculée - puissance moteur gauche
+double setpointGauche = 0.0; // Consigne - impulsions cibles roue gauche
+
+double inputDroite = 0.0;   // Valeur actuelle - impulsions roue droite
+double outputDroite = 0.0;  // Sortie calculée - puissance moteur droite
+double setpointDroite = 0.0; // Consigne - impulsions cibles roue droite
+
+// Création des objets PID pour chaque roue
+PID pidGauche(&inputGauche, &outputGauche, &setpointGauche, Kp_G, Ki_G, Kd_G, 1, 0); // 1=P_ON_E, 0=DIRECT
+PID pidDroite(&inputDroite, &outputDroite, &setpointDroite, Kp_D, Ki_D, Kd_D, 1, 0); // 1=P_ON_E, 0=DIRECT
+
 unsigned long tempsPrec = 0;  // Pour calculer le delta temps
 unsigned long tempsDebutMouvement = 0; // Pour la rampe d'accélération
 
@@ -327,16 +338,22 @@ void demarer(float deltaX, float deltaY) {
   countLeft = 0;
   countRight = 0;
   
-  // Réinitialiser les variables PID
-  erreurSommeGauche = 0.0;
-  erreurSommeDroite = 0.0;
-  erreurPrecedenteGauche = 0.0;
-  erreurPrecedenteDroite = 0.0;
-  tempsPrec = millis();
+  // Réinitialiser les variables pour le nouveau PID
+  inputGauche = countLeft;
+  inputDroite = countRight;
+  setpointGauche = seuilImpulsionsRoueGauche;
+  setpointDroite = seuilImpulsionsRoueDroite;
   
-  // Début du mouvement avec rampe d'accélération
+  // Réinitialiser les PID en réactivant le mode automatique
+  pidGauche.SetMode(0);  // MANUAL
+  pidGauche.SetMode(1);  // AUTOMATIC
+  pidDroite.SetMode(0);  // MANUAL
+  pidDroite.SetMode(1);  // AUTOMATIC
+  
+  // Début du mouvement avec le nouveau PID
   tempsDebutMouvement = millis();
-  addLog("[demarer] Début du mouvement avec rampe d'accélération et PID ajusté");
+  tempsPrec = millis();
+  addLog("[demarer] Début du mouvement avec nouveau PID: Gauche=" + String(setpointGauche) + ", Droite=" + String(setpointDroite));
   
   // Ne pas désactiver complètement le WiFi, juste marquer qu'on est en mouvement
   // WiFi.disconnect();
@@ -370,66 +387,49 @@ bool avancerCorrige() {
     digitalWrite(IN_1_G, LOW); digitalWrite(IN_2_G, HIGH);
   }
   
-  // Mise à jour du temps actuel (utilisé pour les logs)
-  unsigned long tempsActuel = millis();
-  tempsPrec = tempsActuel;
+  // Mise à jour des entrées du PID avec les valeurs actuelles des encodeurs
+  inputGauche = countLeft;
+  inputDroite = countRight;
   
-  // Conserver uniquement le terme proportionnel (Kp) du PID
-  // Calcul des erreurs pour chaque roue (encodeurs)
-  float erreurGauche = seuilImpulsionsRoueGauche - countLeft;
-  float erreurDroite = seuilImpulsionsRoueDroite - countRight;
+  // Calculer les nouvelles sorties PID
+  pidGauche.Compute();
+  pidDroite.Compute();
   
-  // Calculer les corrections avec seulement le terme proportionnel
-  float correctionGauche = Kp_G * erreurGauche;
-  float correctionDroite = Kp_D * erreurDroite;
-  
-  // Parties du PID commentées - on garde uniquement le terme proportionnel (Kp)
-  /*
-  // Ne pas laisser l'intégrateur s'emballer - limiter la somme des erreurs
-  if (abs(erreurGauche) < seuilImpulsionsRoueGauche * 0.5) { // Ne pas intégrer si l'erreur est trop grande
-    erreurSommeGauche += erreurGauche * deltaTemps;
-    // Anti-windup - limiter l'accumulation
-    erreurSommeGauche = constrain(erreurSommeGauche, -100, 100);
-  }
-  
-  if (abs(erreurDroite) < seuilImpulsionsRoueDroite * 0.5) { // Ne pas intégrer si l'erreur est trop grande
-    erreurSommeDroite += erreurDroite * deltaTemps;
-    // Anti-windup - limiter l'accumulation
-    erreurSommeDroite = constrain(erreurSommeDroite, -100, 100);
-  }
-  
-  // Calculer le terme dérivé
-  float erreurDeriveGauche = (erreurGauche - erreurPrecedenteGauche) / deltaTemps;
-  float erreurDeriveDroite = (erreurDroite - erreurPrecedenteDroite) / deltaTemps;
-  
-  // Mémoriser les erreurs actuelles pour la prochaine itération
-  erreurPrecedenteGauche = erreurGauche;
-  erreurPrecedenteDroite = erreurDroite;
-  
-  // Calculer les corrections PID complètes
-  float correctionGauche = Kp_G * erreurGauche + Ki_G * erreurSommeGauche + Kd_G * erreurDeriveGauche;
-  float correctionDroite = Kp_D * erreurDroite + Ki_D * erreurSommeDroite + Kd_D * erreurDeriveDroite;
-  */
-
   // Utiliser le facteur de rampe pour un démarrage en douceur
-  float facteurRampe = 1.0; // On garde une rampe simple
-  unsigned long tempsEcoule = millis() - tempsDebutMouvement;
+  float facteurRampe = 1.0;
+  unsigned long tempsActuel = millis();
+  unsigned long tempsEcoule = tempsActuel - tempsDebutMouvement;
+  
   if (tempsEcoule < TEMPS_RAMPE_MS) {
     facteurRampe = (float)tempsEcoule / TEMPS_RAMPE_MS;
+    // Rampe plus douce au démarrage (fonction quadratique)
+    facteurRampe = facteurRampe * facteurRampe;
   }
   
-  // Appliquer les corrections proportionnelles calculées avec la rampe
-  int pwmD = constrain(PWM_MIN + correctionDroite * facteurRampe, PWM_MIN, PWM_MAX);
-  int pwmG = constrain(PWM_MIN + correctionGauche * facteurRampe, PWM_MIN, PWM_MAX);
+  // Calculer les erreurs actuelles pour les logs
+  double erreurGauche = setpointGauche - inputGauche;
+  double erreurDroite = setpointDroite - inputDroite;
   
-  // Log simplifié des valeurs de PWM et mise à jour de la position réelle périodiquement
+  // Appliquer les corrections PID calculées avec la rampe d'accélération
+  int pwmG = constrain(PWM_MIN + outputGauche * facteurRampe, PWM_MIN, PWM_MAX);
+  int pwmD = constrain(PWM_MIN + outputDroite * facteurRampe, PWM_MIN, PWM_MAX);
+  
+  // Logs détaillés et mise à jour de la position réelle périodiquement
   static unsigned long dernierLog = 0;
   if (millis() - dernierLog > 1000) { // Une fois par seconde
     // Mettre à jour la position réelle pendant le mouvement
     positionReelle = calculerNouvellePositionReelle(countLeft, countRight);
     
-    addLog("[moteurs] PWM G: " + String(pwmG) + ", PWM D: " + String(pwmD) + 
-           " | Pos réelle: X=" + String(positionReelle.x, 2) + ", Y=" + String(positionReelle.y, 2));
+    // Log des informations PID détaillées
+    addLog("[PID G] Cible: " + String(setpointGauche) + ", Actuel: " + String(inputGauche) + 
+           ", Erreur: " + String(erreurGauche) + ", Puissance: " + String(pwmG));
+    addLog("[PID D] Cible: " + String(setpointDroite) + ", Actuel: " + String(inputDroite) + 
+           ", Erreur: " + String(erreurDroite) + ", Puissance: " + String(pwmD));
+    
+    // Log de la position réelle
+    addLog("[position] Réelle: X=" + String(positionReelle.x, 2) + ", Y=" + String(positionReelle.y, 2) + 
+           ", Écart: X=" + String(positionReelle.x - robotState.x, 2) + ", Y=" + String(positionReelle.y - robotState.y, 2));
+    
     dernierLog = millis();
   }
   
@@ -544,6 +544,14 @@ void setup()
   attachInterrupt(digitalPinToInterrupt(encoderLeftA),  countLeftEncoder,  RISING);
   attachInterrupt(digitalPinToInterrupt(encoderRightA), countRightEncoder, RISING);
 
+  // Initialiser les contrôleurs PID
+  pidGauche.SetOutputLimits(0, PWM_MAX - PWM_MIN);
+  pidDroite.SetOutputLimits(0, PWM_MAX - PWM_MIN);
+  pidGauche.SetSampleTime(50);  // 50ms (20Hz)
+  pidDroite.SetSampleTime(50);  // 50ms (20Hz)
+  pidGauche.SetMode(1);  // AUTOMATIC
+  pidDroite.SetMode(1);  // AUTOMATIC
+  
   // S'assurer que les séquences sont désactivées au démarrage
   sequenceEnCours = false;
   deplacementFait = true; // Pour éviter que le robot ne bouge au démarrage
