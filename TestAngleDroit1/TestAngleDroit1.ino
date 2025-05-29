@@ -50,6 +50,21 @@ float distance_en_cm_roue_droite = 0;
 bool directionAvantGauche = true; // true = avant, false = arrière
 bool directionAvantDroite = true; // true = avant, false = arrière
 
+/* ===== VARIABLES PID ===== */
+// Variables de PID pour la roue gauche
+float Kp_G = 2.5;    // Coefficient proportionnel
+float Ki_G = 0.05;   // Coefficient intégrateur
+float Kd_G = 1.0;    // Coefficient dérivé
+float erreurSommeGauche = 0.0;   // Somme des erreurs (pour le terme intégrateur)
+float erreurPrecedenteGauche = 0.0;  // Erreur précédente (pour le terme dérivé)
+// Variables de PID pour la roue droite
+float Kp_D = 2.5;    // Coefficient proportionnel
+float Ki_D = 0.05;   // Coefficient intégrateur
+float Kd_D = 1.0;    // Coefficient dérivé
+float erreurSommeDroite = 0.0;   // Somme des erreurs (pour le terme intégrateur)
+float erreurPrecedenteDroite = 0.0;  // Erreur précédente (pour le terme dérivé)
+unsigned long tempsPrec = 0;  // Pour calculer le delta temps
+
 /* ===== VARIABLES POUR SÉQUENCE AUTOMATIQUE ===== */
 bool sequenceEnCours = false;
 int etapeSequence = 0;
@@ -60,7 +75,8 @@ bool executerProchainMouvement = true;
 
 /* ===== PROTOTYPES DE FONCTIONS ===== */
 void demarer(float deltaX, float deltaY); // Déclaration anticipée
-void executerSequenceAutomatique(); // Déclaration pour la séquence automatique
+void executerSequenceAutomatique();
+void executerSequenceEscalier(); // Déclaration pour la séquence automatique
 
 
 /* ===== STRUCTURES ===== */
@@ -310,10 +326,17 @@ void demarer(float deltaX, float deltaY) {
   countLeft = 0;
   countRight = 0;
   
-  // Désactiver le WiFi pendant le déplacement
-  WiFi.disconnect();
-  server.end();
-  addLog("[demarer] WiFi désactivé pendant le déplacement");
+  // Réinitialiser les variables PID
+  erreurSommeGauche = 0.0;
+  erreurSommeDroite = 0.0;
+  erreurPrecedenteGauche = 0.0;
+  erreurPrecedenteDroite = 0.0;
+  tempsPrec = millis();
+  
+  // Ne pas désactiver complètement le WiFi, juste marquer qu'on est en mouvement
+  // WiFi.disconnect();
+  // server.end();
+  addLog("[demarer] Début du déplacement - WiFi peut être moins réactif");
   
   // Activer le mouvement
   correctionActive = true;
@@ -337,15 +360,59 @@ bool avancerCorrige() {
     digitalWrite(IN_1_G, LOW); digitalWrite(IN_2_G, HIGH);
   }
   
-  int erreurGauche = seuilImpulsionsRoueGauche - countLeft;
-  int erreurDroite = seuilImpulsionsRoueDroite - countRight;
+  // Calcul du temps écoulé depuis la dernière mise à jour
+  unsigned long tempsActuel = millis();
+  float deltaTemps = (tempsActuel - tempsPrec) / 1000.0; // Convertir en secondes
+  tempsPrec = tempsActuel;
+  
+  // Calcul des erreurs pour chaque roue
+  float erreurGauche = seuilImpulsionsRoueGauche - countLeft;
+  float erreurDroite = seuilImpulsionsRoueDroite - countRight;
+  
+  // Ne pas laisser l'intégrateur s'emballer - limiter la somme des erreurs
+  if (abs(erreurGauche) < seuilImpulsionsRoueGauche * 0.5) { // Ne pas intégrer si l'erreur est trop grande
+    erreurSommeGauche += erreurGauche * deltaTemps;
+    // Anti-windup - limiter l'accumulation
+    erreurSommeGauche = constrain(erreurSommeGauche, -100, 100);
+  }
+  
+  if (abs(erreurDroite) < seuilImpulsionsRoueDroite * 0.5) { // Ne pas intégrer si l'erreur est trop grande
+    erreurSommeDroite += erreurDroite * deltaTemps;
+    // Anti-windup - limiter l'accumulation
+    erreurSommeDroite = constrain(erreurSommeDroite, -100, 100);
+  }
+  
+  // Calculer le terme dérivé
+  float erreurDeriveGauche = (erreurGauche - erreurPrecedenteGauche) / deltaTemps;
+  float erreurDeriveDroite = (erreurDroite - erreurPrecedenteDroite) / deltaTemps;
+  
+  // Mémoriser les erreurs actuelles pour la prochaine itération
+  erreurPrecedenteGauche = erreurGauche;
+  erreurPrecedenteDroite = erreurDroite;
+  
+  // Calculer les corrections PID pour chaque roue
+  float correctionGauche = Kp_G * erreurGauche + Ki_G * erreurSommeGauche + Kd_G * erreurDeriveGauche;
+  float correctionDroite = Kp_D * erreurDroite + Ki_D * erreurSommeDroite + Kd_D * erreurDeriveDroite;
 
-  float Kp = 10;
-  int correctionGauche = Kp * erreurGauche;
-  int correctionDroite = Kp * erreurDroite;
-
-  int pwmD = constrain(PWM_MIN + correctionDroite,PWM_MIN , PWM_MAX);
+  // Appliquer les corrections aux moteurs, avec contraintes min/max
+  int pwmD = constrain(PWM_MIN + correctionDroite, PWM_MIN, PWM_MAX);
   int pwmG = constrain(PWM_MIN + correctionGauche, PWM_MIN, PWM_MAX);
+  
+  // Loguer les valeurs du PID occasionnellement pour le débogage
+  static unsigned long dernierLog = 0;
+  if (millis() - dernierLog > 500) { // Log toutes les 500ms
+    addLog("[PID] G: err=" + String(erreurGauche, 1) + 
+          " P=" + String(Kp_G * erreurGauche, 1) + 
+          " I=" + String(Ki_G * erreurSommeGauche, 1) + 
+          " D=" + String(Kd_G * erreurDeriveGauche, 1) + 
+          " PWM=" + String(pwmG));
+    addLog("[PID] D: err=" + String(erreurDroite, 1) + 
+          " P=" + String(Kp_D * erreurDroite, 1) + 
+          " I=" + String(Ki_D * erreurSommeDroite, 1) + 
+          " D=" + String(Kd_D * erreurDeriveDroite, 1) + 
+          " PWM=" + String(pwmD));
+    dernierLog = millis();
+  }
 
   analogWrite(EN_D, pwmD);
   analogWrite(EN_G, pwmG);
@@ -354,11 +421,11 @@ bool avancerCorrige() {
   if (fini) {
     addLog("[avancerCorrige] Déplacement terminé");
     
-    // Réactiver le WiFi après le déplacement
-    WiFi.softAP(ssid, password);
-    server.begin();
-    String ipAddress = WiFi.softAPIP().toString();
-    addLog("[avancerCorrige] WiFi réactivé - IP: " + ipAddress);
+    // Le WiFi est resté actif, pas besoin de le réactiver
+    // WiFi.softAP(ssid, password);
+    // server.begin();
+    // String ipAddress = WiFi.softAPIP().toString();
+    addLog("[avancerCorrige] Déplacement terminé - WiFi pleinement disponible");
   }
   return fini;
 }
@@ -520,6 +587,22 @@ void loop() {
           demarer(dx, dy);
         }
       } else {
+        // Vérifier si c'est une demande pour lancer la séquence escalier
+        int posSequenceEscalier = request.indexOf("sequence_escalier=1");
+        
+        if (posSequenceEscalier != -1 && isFormSubmit) {
+          addLog("[wifi] Demande de séquence escalier détectée");
+          // Démarrer la séquence escalier uniquement si le robot est disponible
+          if (deplacementFait) {
+            sequenceEnCours = true;
+            etapeSequence = 0;
+            executerProchainMouvement = true;
+            addLog("[wifi] Séquence escalier initialisée");
+          } else {
+            addLog("[wifi] Impossible de démarrer la séquence: robot en mouvement");
+          }
+        }
+        
         // Vérifier si c'est une demande pour réinitialiser la position du robot
         int posReset = request.indexOf("reset=1");
         
@@ -626,13 +709,13 @@ void loop() {
       
       html += "</div>"; // Fin du conteneur des boutons directionnels relatifs
       
-      // Ajouter le bouton pour la séquence automatique (carré)
-      // html += "<div style='margin-top:20px; margin-bottom:20px;'>";
-      // html += "<h2>Séquence Automatique</h2>";
-      // html += "<p>Dessiner un carré : 10 pas à droite, 10 pas en haut, 10 pas à droite</p>";
-      // html += "<a href='/?sequence=1&submit=1' style='background:#FF5722; color:white; padding:15px 30px; border-radius:5px; text-decoration:none; display:inline-block; margin:10px; font-weight:bold;'>Lancer la séquence</a>";
-      // html += sequenceEnCours ? "<p><strong>Séquence en cours : Étape " + String(etapeSequence) + "/" + String(ETAPES_SEQUENCE_MAX) + "</strong></p>" : "";
-      // html += "</div>"; // Fin du conteneur pour la séquence automatique
+      // Ajouter le bouton pour la séquence en escalier
+      html += "<div style='margin-top:20px; margin-bottom:20px;'>";
+      html += "<h2>Séquence Escalier</h2>";
+      html += "<p>Dessiner un escalier : 20cm en ligne droite, puis 10 pas de 1cm vers le haut, puis 20 pas de 1cm vers la droite</p>";
+      html += "<a href='/?sequence_escalier=1&submit=1' style='background:#FF5722; color:white; padding:15px 30px; border-radius:5px; text-decoration:none; display:inline-block; margin:10px; font-weight:bold;'>Lancer la séquence</a>";
+      html += sequenceEnCours ? "<p><strong>Séquence en cours : Étape " + String(etapeSequence) + "/" + String(ETAPES_SEQUENCE_MAX) + "</strong></p>" : "";
+      html += "</div>"; // Fin du conteneur pour la séquence escalier
       
       // Ajouter une section de test de coordonnées absolues
       // html += "<div style='margin-top:20px; margin-bottom:20px;'>";
@@ -697,9 +780,9 @@ void loop() {
     }
   }
   
-  // Si une séquence automatique est en cours, continuer son exécution
+  // Si une séquence est en cours, continuer son exécution
   if (sequenceEnCours && deplacementFait) {
-    executerSequenceAutomatique();
+    executerSequenceEscalier();
   }
   
 
