@@ -36,11 +36,12 @@ bool deplacementFait = true; // Set to true initially to prevent movement until 
 
 /* ===== PARAMÈTRES ===== */
 const float IMPULSIONS_PAR_CM = 34.0;
-const int   PWM_MIN = 70;
-const int   PWM_MAX = 110;
+const int   PWM_MIN = 70;       // Valeur d'origine
+const int   PWM_MAX = 110;      // Valeur d'origine
 const float DIST_STYLO_CM = 13.0;
 const float LARGEUR_ROBOT = 8.5/2;
 const float LONGUEUR_ROBOT = 13.0; // Distance entre l'axe des roues et le stylo
+const int   TEMPS_RAMPE_MS = 300; // Rampe d'accélération courte
 
 /* ===== VARIABLES INTERNES ===== */
 long seuilImpulsionsRoueGauche = 0;
@@ -52,18 +53,19 @@ bool directionAvantDroite = true; // true = avant, false = arrière
 
 /* ===== VARIABLES PID ===== */
 // Variables de PID pour la roue gauche
-float Kp_G = 2.5;    // Coefficient proportionnel
-float Ki_G = 0.05;   // Coefficient intégrateur
-float Kd_G = 1.0;    // Coefficient dérivé
+float Kp_G = 8.0;    // Coefficient proportionnel d'origine
+float Ki_G = 0.01;   // Coefficient intégrateur très faible
+float Kd_G = 0.5;    // Coefficient dérivé modéré
 float erreurSommeGauche = 0.0;   // Somme des erreurs (pour le terme intégrateur)
 float erreurPrecedenteGauche = 0.0;  // Erreur précédente (pour le terme dérivé)
 // Variables de PID pour la roue droite
-float Kp_D = 2.5;    // Coefficient proportionnel
-float Ki_D = 0.05;   // Coefficient intégrateur
-float Kd_D = 1.0;    // Coefficient dérivé
+float Kp_D = 8.0;    // Coefficient proportionnel d'origine
+float Ki_D = 0.01;   // Coefficient intégrateur très faible
+float Kd_D = 0.5;    // Coefficient dérivé modéré
 float erreurSommeDroite = 0.0;   // Somme des erreurs (pour le terme intégrateur)
 float erreurPrecedenteDroite = 0.0;  // Erreur précédente (pour le terme dérivé)
 unsigned long tempsPrec = 0;  // Pour calculer le delta temps
+unsigned long tempsDebutMouvement = 0; // Pour la rampe d'accélération
 
 /* ===== VARIABLES POUR SÉQUENCE AUTOMATIQUE ===== */
 bool sequenceEnCours = false;
@@ -78,12 +80,10 @@ void demarer(float deltaX, float deltaY); // Déclaration anticipée
 void executerSequenceAutomatique();
 void executerSequenceEscalier(); // Déclaration pour la séquence automatique
 
-
-/* ===== STRUCTURES ===== */
-// Les structures ont été déplacées dans le fichier RobotStructures.h
-
 /* ===== POSITION DU ROBOT ===== */
 RobotState robotState;  // Position et orientation du robot
+RobotState positionTheorique;  // Position théorique calculée
+RobotState positionReelle;  // Position réelle calculée
 
 /* ===== LOGS ===== */
 const int MAX_LOGS = 100; // Augmentation significative du nombre de logs conservés
@@ -319,8 +319,9 @@ void demarer(float deltaX, float deltaY) {
   
 
   // Calculer et mettre à jour la position du robot
-  //robotState = calculerNouvellePositionReelle(countLeft, countRight);
-  robotState = calculerNouvellePositionTheorique(distance_en_cm_roue_gauche, distance_en_cm_roue_droite);
+  positionReelle = calculerNouvellePositionReelle(countLeft, countRight);
+  positionTheorique = calculerNouvellePositionTheorique(distance_en_cm_roue_gauche, distance_en_cm_roue_droite);
+  robotState = positionTheorique; // On utilise la position théorique comme position actuelle
 
   // Réinitialiser les compteurs
   countLeft = 0;
@@ -333,10 +334,19 @@ void demarer(float deltaX, float deltaY) {
   erreurPrecedenteDroite = 0.0;
   tempsPrec = millis();
   
+  // Début du mouvement avec rampe d'accélération
+  tempsDebutMouvement = millis();
+  addLog("[demarer] Début du mouvement avec rampe d'accélération et PID ajusté");
+  
   // Ne pas désactiver complètement le WiFi, juste marquer qu'on est en mouvement
   // WiFi.disconnect();
   // server.end();
   addLog("[demarer] Début du déplacement - WiFi peut être moins réactif");
+  
+  // Désactiver temporairement le WiFi pendant le déplacement
+  WiFi.disconnect();
+  server.end();
+  addLog("[demarer] WiFi temporairement désactivé pour le déplacement");
   
   // Activer le mouvement
   correctionActive = true;
@@ -360,15 +370,21 @@ bool avancerCorrige() {
     digitalWrite(IN_1_G, LOW); digitalWrite(IN_2_G, HIGH);
   }
   
-  // Calcul du temps écoulé depuis la dernière mise à jour
+  // Mise à jour du temps actuel (utilisé pour les logs)
   unsigned long tempsActuel = millis();
-  float deltaTemps = (tempsActuel - tempsPrec) / 1000.0; // Convertir en secondes
   tempsPrec = tempsActuel;
   
-  // Calcul des erreurs pour chaque roue
+  // Conserver uniquement le terme proportionnel (Kp) du PID
+  // Calcul des erreurs pour chaque roue (encodeurs)
   float erreurGauche = seuilImpulsionsRoueGauche - countLeft;
   float erreurDroite = seuilImpulsionsRoueDroite - countRight;
   
+  // Calculer les corrections avec seulement le terme proportionnel
+  float correctionGauche = Kp_G * erreurGauche;
+  float correctionDroite = Kp_D * erreurDroite;
+  
+  // Parties du PID commentées - on garde uniquement le terme proportionnel (Kp)
+  /*
   // Ne pas laisser l'intégrateur s'emballer - limiter la somme des erreurs
   if (abs(erreurGauche) < seuilImpulsionsRoueGauche * 0.5) { // Ne pas intégrer si l'erreur est trop grande
     erreurSommeGauche += erreurGauche * deltaTemps;
@@ -390,16 +406,43 @@ bool avancerCorrige() {
   erreurPrecedenteGauche = erreurGauche;
   erreurPrecedenteDroite = erreurDroite;
   
-  // Calculer les corrections PID pour chaque roue
+  // Calculer les corrections PID complètes
   float correctionGauche = Kp_G * erreurGauche + Ki_G * erreurSommeGauche + Kd_G * erreurDeriveGauche;
   float correctionDroite = Kp_D * erreurDroite + Ki_D * erreurSommeDroite + Kd_D * erreurDeriveDroite;
+  */
 
-  // Appliquer les corrections aux moteurs, avec contraintes min/max
-  int pwmD = constrain(PWM_MIN + correctionDroite, PWM_MIN, PWM_MAX);
-  int pwmG = constrain(PWM_MIN + correctionGauche, PWM_MIN, PWM_MAX);
+  // Utiliser le facteur de rampe pour un démarrage en douceur
+  float facteurRampe = 1.0; // On garde une rampe simple
+  unsigned long tempsEcoule = millis() - tempsDebutMouvement;
+  if (tempsEcoule < TEMPS_RAMPE_MS) {
+    facteurRampe = (float)tempsEcoule / TEMPS_RAMPE_MS;
+  }
+  
+  // Appliquer les corrections proportionnelles calculées avec la rampe
+  int pwmD = constrain(PWM_MIN + correctionDroite * facteurRampe, PWM_MIN, PWM_MAX);
+  int pwmG = constrain(PWM_MIN + correctionGauche * facteurRampe, PWM_MIN, PWM_MAX);
+  
+  // Log simplifié des valeurs de PWM et mise à jour de la position réelle périodiquement
+  static unsigned long dernierLog = 0;
+  if (millis() - dernierLog > 1000) { // Une fois par seconde
+    // Mettre à jour la position réelle pendant le mouvement
+    positionReelle = calculerNouvellePositionReelle(countLeft, countRight);
+    
+    addLog("[moteurs] PWM G: " + String(pwmG) + ", PWM D: " + String(pwmD) + 
+           " | Pos réelle: X=" + String(positionReelle.x, 2) + ", Y=" + String(positionReelle.y, 2));
+    dernierLog = millis();
+  }
+  
+  /* Logs PID commentés
+  static unsigned long dernierLogRampe = 0;
+  if (tempsEcoule < TEMPS_RAMPE_MS && millis() - dernierLogRampe > 100) {
+    addLog("[rampe] Facteur: " + String(facteurRampe, 2) + 
+           " PWM G: " + String(pwmG) + 
+           " PWM D: " + String(pwmD));
+    dernierLogRampe = millis();
+  }
   
   // Loguer les valeurs du PID occasionnellement pour le débogage
-  static unsigned long dernierLog = 0;
   if (millis() - dernierLog > 500) { // Log toutes les 500ms
     addLog("[PID] G: err=" + String(erreurGauche, 1) + 
           " P=" + String(Kp_G * erreurGauche, 1) + 
@@ -413,6 +456,7 @@ bool avancerCorrige() {
           " PWM=" + String(pwmD));
     dernierLog = millis();
   }
+  */
 
   analogWrite(EN_D, pwmD);
   analogWrite(EN_G, pwmG);
@@ -421,10 +465,18 @@ bool avancerCorrige() {
   if (fini) {
     addLog("[avancerCorrige] Déplacement terminé");
     
-    // Le WiFi est resté actif, pas besoin de le réactiver
-    // WiFi.softAP(ssid, password);
-    // server.begin();
-    // String ipAddress = WiFi.softAPIP().toString();
+    // Mettre à jour les positions calculées à la fin du mouvement
+    positionReelle = calculerNouvellePositionReelle(countLeft, countRight);
+    positionTheorique = calculerNouvellePositionTheorique(distance_en_cm_roue_gauche, distance_en_cm_roue_droite);
+    robotState = positionTheorique; // Utiliser la position théorique comme position actuelle
+    
+    addLog("[avancerCorrige] Position mise à jour - X=" + String(robotState.x, 2) + ", Y=" + String(robotState.y, 2));
+    
+    // Réactiver le WiFi à la fin du mouvement
+    WiFi.softAP(ssid, password);
+    server.begin();
+    String ipAddress = WiFi.softAPIP().toString();
+    addLog("[avancerCorrige] WiFi réactivé - IP: " + ipAddress);
     addLog("[avancerCorrige] Déplacement terminé - WiFi pleinement disponible");
   }
   return fini;
@@ -454,8 +506,10 @@ void resetRobot() {
   
   // Réinitialiser la position et l'orientation
   robotState = RobotState(); // Réinitialiser à 0,0,0 avec le constructeur par défaut
+  positionTheorique = RobotState(); // Réinitialiser la position théorique à 0,0,0
+  positionReelle = RobotState(); // Réinitialiser la position réelle à 0,0,0
   
-  addLog("[reset] Position et orientation réinitialisées à zéro");
+  addLog("[reset] Positions (actuelle, théorique, réelle) et orientation réinitialisées à zéro");
   addLog("[reset] X=0.0, Y=0.0, Theta=0.0°");
 }
 
@@ -466,6 +520,12 @@ void setup()
   Serial.begin(115200);
   delay(1000);
   addLog("[setup] Drawbot démarré");
+  
+  // Initialiser toutes les positions à 0,0,0
+  robotState = RobotState();
+  positionTheorique = RobotState();
+  positionReelle = RobotState();
+  
   addLog("[setup] Position initiale: X=0.0, Y=0.0, Theta=0.0°");
 
   Wire.begin();
@@ -590,16 +650,23 @@ void loop() {
         // Vérifier si c'est une demande pour lancer la séquence escalier
         int posSequenceEscalier = request.indexOf("sequence_escalier=1");
         
-        if (posSequenceEscalier != -1 && isFormSubmit) {
-          addLog("[wifi] Demande de séquence escalier détectée");
-          // Démarrer la séquence escalier uniquement si le robot est disponible
-          if (deplacementFait) {
-            sequenceEnCours = true;
-            etapeSequence = 0;
-            executerProchainMouvement = true;
-            addLog("[wifi] Séquence escalier initialisée");
+        if (posSequenceEscalier != -1) {
+          addLog("[wifi] Paramètre sequence_escalier=1 détecté à la position " + String(posSequenceEscalier));
+        
+          // Vérifier si c'est un clic de bouton (submit=1) et pas un simple rafraîchissement
+          if (isFormSubmit && request.indexOf("GET /?sequence_escalier=1&submit=1") != -1) {
+            addLog("[wifi] Demande de séquence escalier confirmée via clic de bouton");
+            // Démarrer la séquence escalier uniquement si le robot est disponible
+            if (deplacementFait) {
+              sequenceEnCours = true;
+              etapeSequence = 0;
+              executerProchainMouvement = true;
+              addLog("[wifi] Séquence escalier initialisée");
+            } else {
+              addLog("[wifi] Impossible de démarrer la séquence: robot en mouvement");
+            }
           } else {
-            addLog("[wifi] Impossible de démarrer la séquence: robot en mouvement");
+            addLog("[wifi] Paramètre sequence_escalier détecté mais pas via clic de bouton - ignoré");
           }
         }
         
@@ -741,7 +808,15 @@ void loop() {
       html += "<h2>Réinitialisation</h2>";
       html += "<p>Réinitialiser la position du robot à (0,0) et l'angle à 0°</p>";
       html += "<a href='/?reset=1&submit=1' style='background:#F44336; color:white; padding:15px 30px; border-radius:5px; text-decoration:none; display:inline-block; margin:10px; font-weight:bold;'>Réinitialiser position</a>";
-      html += "<p><strong>Position actuelle: X=" + String(robotState.x, 2) + " cm, Y=" + String(robotState.y, 2) + " cm, Angle=" + String(robotState.theta * 180.0 / PI, 1) + "°</strong></p>";
+      html += "<div style='margin-bottom:15px; background:#f0f8ff; padding:10px; border-radius:5px; width:100%; max-width:500px; margin-left:auto; margin-right:auto;'>";
+      html += "<h3>Positions</h3>";
+      html += "<table style='width:100%; border-collapse:collapse;'>";
+      html += "<tr style='background:#e0e0e0;'><th style='text-align:left; padding:5px; border-bottom:1px solid #ccc;'>Type</th><th style='text-align:center; padding:5px; border-bottom:1px solid #ccc;'>X (cm)</th><th style='text-align:center; padding:5px; border-bottom:1px solid #ccc;'>Y (cm)</th><th style='text-align:center; padding:5px; border-bottom:1px solid #ccc;'>Angle (°)</th></tr>";
+      html += "<tr><td style='text-align:left; padding:5px; border-bottom:1px solid #ccc;'><strong>Actuelle</strong></td><td style='text-align:center; padding:5px; border-bottom:1px solid #ccc;'>" + String(robotState.x, 2) + "</td><td style='text-align:center; padding:5px; border-bottom:1px solid #ccc;'>" + String(robotState.y, 2) + "</td><td style='text-align:center; padding:5px; border-bottom:1px solid #ccc;'>" + String(robotState.theta * 180.0 / PI, 1) + "</td></tr>";
+      html += "<tr><td style='text-align:left; padding:5px; border-bottom:1px solid #ccc;'><strong>Théorique</strong></td><td style='text-align:center; padding:5px; border-bottom:1px solid #ccc;'>" + String(positionTheorique.x, 2) + "</td><td style='text-align:center; padding:5px; border-bottom:1px solid #ccc;'>" + String(positionTheorique.y, 2) + "</td><td style='text-align:center; padding:5px; border-bottom:1px solid #ccc;'>" + String(positionTheorique.theta * 180.0 / PI, 1) + "</td></tr>";
+      html += "<tr><td style='text-align:left; padding:5px;'><strong>Réelle</strong></td><td style='text-align:center; padding:5px;'>" + String(positionReelle.x, 2) + "</td><td style='text-align:center; padding:5px;'>" + String(positionReelle.y, 2) + "</td><td style='text-align:center; padding:5px;'>" + String(positionReelle.theta * 180.0 / PI, 1) + "</td></tr>";
+      html += "</table>";
+      html += "</div>";
       html += "</div>"; // Fin du conteneur pour la réinitialisation
       
       // Affichage des logs
