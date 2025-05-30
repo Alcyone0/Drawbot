@@ -601,6 +601,8 @@ void loop() {
       int posY = request.indexOf("dy=");
       int posType = request.indexOf("type=");
       int posIncrement = request.indexOf("increment=");
+      int posTargetX = request.indexOf("target_x=");
+      int posTargetY = request.indexOf("target_y=");
       
       // Vérifier si c'est une vraie requête de formulaire avec des paramètres
       bool isFormSubmit = false;
@@ -615,13 +617,15 @@ void loop() {
           addLog("[wifi] Demande de réinitialisation reçue");
         } else if (request.indexOf("GET /?dx=") != -1) {
           addLog("[wifi] Demande de déplacement reçue");
+        } else if (request.indexOf("GET /?target_x=") != -1) {
+          addLog("[wifi] Demande de déplacement vers coordonnées absolues reçue");
         }
       } else if (request.indexOf("GET /?dx=") != -1 || request.indexOf("GET /?reset=") != -1) {
         // C'est un rechargement de page avec les paramètres dans l'URL
         addLog("[wifi] Recharge de page détectée, mouvement ignoré");
       }
       
-      // Traiter les boutons de déplacement
+      // Traiter les boutons de déplacement relatif (dx/dy)
       if (posX != -1 && posY != -1 && isFormSubmit) {
         // Déterminer le type de coordonnées (absolu, robot, ou direct)
         String coordType = "absolu"; // Par défaut, on considère les coordonnées comme absolues
@@ -660,6 +664,25 @@ void loop() {
           addLog("[wifi] Utilisation directe des coordonnées: " + coordType + " (" + String(dx, 2) + ", " + String(dy, 2) + ")");
           demarer(dx, dy);
         }
+      } 
+      // Traiter le formulaire de coordonnées absolues (target_x/target_y)
+      else if (posTargetX != -1 && posTargetY != -1 && isFormSubmit) {
+        // Extraire les valeurs des coordonnées absolues
+        float targetX = request.substring(posTargetX + 9, request.indexOf('&', posTargetX)).toFloat();
+        float targetY = request.substring(posTargetY + 9, request.indexOf('&', posTargetY)).toFloat();
+        addLog("[wifi] Coordonnées absolues reçues: X=" + String(targetX, 2) + ", Y=" + String(targetY, 2));
+        
+        // Calculer les deltas pour atteindre la position cible depuis la position actuelle
+        float dx = targetX - robotState.x;
+        float dy = targetY - robotState.y;
+        addLog("[wifi] Déplacement calculé: dX=" + String(dx, 2) + ", dY=" + String(dy, 2));
+        
+        // Créer un point absolu pour la conversion
+        DeltaXY absolutePoint(targetX, targetY);
+        // Convertir en coordonnées relatives au robot
+        DeltaXY robotCoord = convertAbsoluteToRobotCoordinates(absolutePoint, robotState);
+        // Démarrer le mouvement avec les coordonnées relatives calculées
+        demarer(robotCoord.x, robotCoord.y);
       } else {
         // Vérifier si c'est une demande pour lancer la séquence escalier
         int posSequenceEscalier = request.indexOf("sequence_escalier=1");
@@ -798,24 +821,26 @@ void loop() {
       html += sequenceEnCours ? "<p><strong>Séquence en cours : Étape " + String(etapeSequence) + "/" + String(ETAPES_SEQUENCE_MAX) + "</strong></p>" : "";
       html += "</div>"; // Fin du conteneur pour la séquence escalier
       
-      // Ajouter une section de test de coordonnées absolues
-      // html += "<div style='margin-top:20px; margin-bottom:20px;'>";
-      // html += "<h2>Test de Coordonnées</h2>";
-      // html += "<p>Vérifier si le robot atteint les coordonnées indiquées</p>";
-      // html += "<form action='/' method='get' style='background:#e3f2fd;'>";
-      // html += "<div class='input-group'>";
-      // html += "<label for='target_x'>Coordonnée X (cm):</label>";
-      // html += "<input type='number' step='0.1' name='target_x' id='target_x' value='0' required>";
-      // html += "</div>";
-      // html += "<div class='input-group'>";
-      // html += "<label for='target_y'>Coordonnée Y (cm):</label>";
-      // html += "<input type='number' step='0.1' name='target_y' id='target_y' value='0' required>";
-      // html += "</div>";
-      // html += "<input type='hidden' name='submit' value='1'>";
-      // html += "<input type='submit' value='Aller à cette position' style='background:#2196F3;'>";
-      // html += "</form>";
-      // html += "<p><strong>Position actuelle: X=" + String(robotState.x, 2) + " cm, Y=" + String(robotState.y, 2) + " cm</strong></p>";
-      // html += "</div>"; // Fin du conteneur pour le test de coordonnées
+      // Ajouter une section pour aller à des coordonnées absolues spécifiques
+      html += "<div style='margin-top:20px; margin-bottom:20px;'>";
+      html += "<h2>Coordonnées Absolues</h2>";
+      html += "<p>Entrez les coordonnées absolues où le robot doit se rendre</p>";
+      html += "<form action='/' method='get' style='background:#e3f2fd; padding:15px; border-radius:10px; max-width:300px; margin:0 auto;'>";
+      html += "<div style='margin-bottom:10px;'>";
+      html += "<label for='target_x' style='display:block; text-align:left; margin-bottom:5px;'>Coordonnée X (cm):</label>";
+      html += "<input type='number' step='0.1' name='target_x' id='target_x' value='" + String(robotState.x, 1) + "' required style='width:80%; padding:8px;'>";
+      html += "</div>";
+      html += "<div style='margin-bottom:15px;'>";
+      html += "<label for='target_y' style='display:block; text-align:left; margin-bottom:5px;'>Coordonnée Y (cm):</label>";
+      html += "<input type='number' step='0.1' name='target_y' id='target_y' value='" + String(robotState.y, 1) + "' required style='width:80%; padding:8px;'>";
+      html += "</div>";
+      html += "<input type='hidden' name='type' value='absolu'>";
+      html += "<input type='hidden' name='increment' value='" + String(increment) + "'>";
+      html += "<input type='hidden' name='submit' value='1'>";
+      html += "<input type='submit' value='Aller à cette position' style='background:#673AB7; color:white; padding:10px 15px; border:none; border-radius:5px; cursor:pointer; width:auto;'>";
+      html += "</form>";
+      html += "<p><strong>Position actuelle: X=" + String(robotState.x, 2) + " cm, Y=" + String(robotState.y, 2) + " cm</strong></p>";
+      html += "</div>"; // Fin du conteneur pour les coordonnées absolues
       
       // Ajouter le bouton de réinitialisation (reset)
       html += "<div style='margin-top:20px; margin-bottom:20px;'>";
