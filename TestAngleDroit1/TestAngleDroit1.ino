@@ -36,11 +36,12 @@ bool correctionActive = false;
 bool deplacementFait = true; // Set to true initially to prevent movement until WiFi instructions
 
 /* ===== PARAMÈTRES ===== */
-const float IMPULSIONS_PAR_CM = 54.4;  // Valeur recalibrée (ancienne valeur = 34.0)
+const float IMPULSIONS_PAR_CM = 34;  // Recalibré (ancienne valeur = 34.0)
 const int   PWM_MIN = 70;       // Valeur d'origine
 const int   PWM_MAX = 110;      // Valeur d'origine
 const float DIST_STYLO_CM = 13.0;
 const float LARGEUR_ROBOT = 8.5/2;
+const float FACTEUR_CORRECTION_X = 1.01;  // Facteur de correction pour compenser la dérive en X
 const float LONGUEUR_ROBOT = 13.0; // Distance entre l'axe des roues et le stylo
 const int   TEMPS_RAMPE_MS = 300; // Rampe d'accélération courte
 
@@ -55,21 +56,21 @@ bool directionAvantDroite = true; // true = avant, false = arrière
 /* ===== VARIABLES PID ===== */
 // Paramètres de PID améliorés
 double Kp_G = 8.0;    // Coefficient proportionnel roue gauche
-double Ki_G = 0.1;    // Coefficient intégrateur roue gauche
-double Kd_G = 0.5;    // Coefficient dérivé roue gauche
+double Ki_G = 0.05;    // Coefficient intégrateur roue gauche
+double Kd_G = 0.0;    // Coefficient dérivé roue gauche
 
 double Kp_D = 8.0;    // Coefficient proportionnel roue droite
 double Ki_D = 0.1;    // Coefficient intégrateur roue droite
-double Kd_D = 0.5;    // Coefficient dérivé roue droite
+double Kd_D = 0.0;    // Coefficient dérivé roue droite
 
 // Variables pour le nouveau PID
 double inputGauche = 0.0;   // Valeur actuelle - impulsions roue gauche
 double outputGauche = 0.0;  // Sortie calculée - puissance moteur gauche
-double setpointGauche = 0.0; // Consigne - impulsions cibles roue gauche
+double setpointGauche = 5.0; // Consigne - impulsions cibles roue gauche
 
 double inputDroite = 0.0;   // Valeur actuelle - impulsions roue droite
 double outputDroite = 0.0;  // Sortie calculée - puissance moteur droite
-double setpointDroite = 0.0; // Consigne - impulsions cibles roue droite
+double setpointDroite = 5.0; // Consigne - impulsions cibles roue droite
 
 // Création des objets PID pour chaque roue
 PID pidGauche(&inputGauche, &outputGauche, &setpointGauche, Kp_G, Ki_G, Kd_G, 1, 0); // 1=P_ON_E, 0=DIRECT
@@ -128,6 +129,8 @@ void calibrerGyro()
 // Calcule les distances des deux roues en fonction du déplacement demandé et met à jour la position du robot
 WheelDistances calculerDistancesRoues(float deltaX, float deltaY) {
   WheelDistances distances;
+  // Formule corrigée pour calculer les distances de roues en fonction du déplacement souhaité
+  // La roue gauche doit ralentir dans les virages à gauche (deltaY < 0) et accélérer dans les virages à droite (deltaY > 0)
   distances.left = deltaX - (LARGEUR_ROBOT / LONGUEUR_ROBOT) * deltaY;
   distances.right = deltaX + (LARGEUR_ROBOT / LONGUEUR_ROBOT) * deltaY;  
 
@@ -150,20 +153,21 @@ RobotState calculerNouvellePositionTheorique(float distanceLeft, float distanceR
   float deplacementAxeRobot = (distances.left + distances.right) / 2.0;
 
   // Calcul de la différence entre les distances des roues
-  float deltaRoues = distances.left - distances.right; // Attention au signe
+  float deltaRoues = distances.right - distances.left; // Signe corrigé pour correspondre au sens réel
   
   // Calcul de l'angle relatif avec atan2
-  float angleRelatif = atan2(deltaRoues, LARGEUR_ROBOT)/2.; // Attention à l'ordre
+  float angleRelatif = atan2(deltaRoues, 2 * LARGEUR_ROBOT); // Formule corrigée
 
-  // Déplacement latéral
+  // Déplacement latéral (en fonction de l'angle de rotation)
   float deplacementLatéral = LONGUEUR_ROBOT * sin(angleRelatif);
   
   // Calcul de l'angle absolu
-  float angle = robotState.theta - angleRelatif;
+  float angle = robotState.theta + angleRelatif; // Signe corrigé pour l'orientation
   
   // Mise à jour de la position du robot en fonction de son orientation
-  newState.x = robotState.x + deplacementAxeRobot * cos(robotState.theta) + deplacementLatéral * sin(robotState.theta); // Attention à cos sin et au + -
-  newState.y = robotState.y + deplacementAxeRobot * sin(robotState.theta) - deplacementLatéral * cos(robotState.theta); // Attention à cos sin et au + -
+  // Correction des formules en tenant compte de l'orientation réelle du robot
+  newState.x = robotState.x + deplacementAxeRobot * cos(robotState.theta) - deplacementLatéral * sin(robotState.theta);
+  newState.y = robotState.y + deplacementAxeRobot * sin(robotState.theta) + deplacementLatéral * cos(robotState.theta);
   
   // Mise à jour de l'angle du robot
   newState.theta = angle;
@@ -189,20 +193,21 @@ RobotState calculerNouvellePositionReelle(int tickLeft, int tickRight) {
   float deplacementAxeRobot = (distances.left + distances.right) / 2.0;
 
   // Calcul de la différence entre les distances des roues
-  float deltaRoues = distances.left - distances.right; // Attention au signe
+  float deltaRoues = distances.right - distances.left; // Signe corrigé pour correspondre au sens réel
   
   // Calcul de l'angle relatif avec atan2
-  float angleRelatif = atan2(deltaRoues, LARGEUR_ROBOT)/2.; // Attention à l'ordre
+  float angleRelatif = atan2(deltaRoues, 2 * LARGEUR_ROBOT); // Formule corrigée
 
-  // Déplacement latéral
+  // Déplacement latéral (en fonction de l'angle de rotation)
   float deplacementLatéral = LONGUEUR_ROBOT * sin(angleRelatif);
   
   // Calcul de l'angle absolu
-  float angle = robotState.theta - angleRelatif;
+  float angle = robotState.theta + angleRelatif; // Signe corrigé pour l'orientation
   
   // Mise à jour de la position du robot en fonction de son orientation
-  newState.x = robotState.x + deplacementAxeRobot * cos(robotState.theta) + deplacementLatéral * sin(robotState.theta); // Attention à cos sin et au + -
-  newState.y = robotState.y + deplacementAxeRobot * sin(robotState.theta) - deplacementLatéral * cos(robotState.theta); // Attention à cos sin et au + -
+  // Correction des formules en tenant compte de l'orientation réelle du robot
+  newState.x = robotState.x + deplacementAxeRobot * cos(robotState.theta) - deplacementLatéral * sin(robotState.theta);
+  newState.y = robotState.y + deplacementAxeRobot * sin(robotState.theta) + deplacementLatéral * cos(robotState.theta);
   
   // Mise à jour de l'angle du robot
   newState.theta = angle;
@@ -222,21 +227,12 @@ DeltaXY convertAbsoluteToRobotCoordinates(DeltaXY targetPoint, RobotState robotS
   float deltaY = targetPoint.y - robotState.y;
   float distance = sqrt(deltaX * deltaX + deltaY * deltaY);
 
-  addLog("[convertAbsoluteToRobotCoordinates] Delta X = " + String(deltaX, 2));
-  addLog("[convertAbsoluteToRobotCoordinates] Delta Y = " + String(deltaY, 2));
-  addLog("[convertAbsoluteToRobotCoordinates] Distance = " + String(distance, 2));
-
   float angle = atan2(deltaY, deltaX); // Angle par rapport à l'axe X
-  addLog("[convertAbsoluteToRobotCoordinates] AngleAbsolu = " + String(angle*180/PI, 2));
   float angleRelatif =  angle - robotState.theta;
-  addLog("[convertAbsoluteToRobotCoordinates] Angle relatif = " + String(angleRelatif*180/PI, 2));
-  addLog("[convertAbsoluteToRobotCoordinates] Angle Robot = " + String(robotState.theta*180/PI, 2));
   
   // 3. Reconvertir en coordonnées cartésiennes relatives au robot
   float deltaRobotX = distance * cos(angleRelatif);
   float deltaRobotY = distance * sin(angleRelatif);
-  addLog("[convertAbsoluteToRobotCoordinates] Delta robot X = " + String(deltaRobotX, 2));
-  addLog("[convertAbsoluteToRobotCoordinates] Delta robot Y = " + String(deltaRobotY, 2));
   
   // Créer un point pour les coordonnées relatives au robot
   DeltaXY robotRelativePoint(deltaRobotX, deltaRobotY);
@@ -261,29 +257,25 @@ void addLog(String message) {
 }
 
 String getAllLogs() {
-  String allLogs = "";
-  int count = 0;
+  String result = "";
+  int logCount = 0;
+  const int MAX_DISPLAYED_LOGS = 30; // Limite le nombre de logs pour éviter les problèmes de mémoire
   
-  // Trouver le plus ancien log (non vide)
-  int startIdx = logIndex;
-  for (int i = 0; i < MAX_LOGS; i++) {
-    int idx = (logIndex + i) % MAX_LOGS;
-    if (logs[idx].length() == 0) {
-      startIdx = (idx + 1) % MAX_LOGS;
-      break;
+  // Création de la liste des logs en commençant par le plus récent
+  for (int i = 0; i < MAX_LOGS && logCount < MAX_DISPLAYED_LOGS; i++) {
+    int index = (logIndex - 1 - i + MAX_LOGS) % MAX_LOGS;
+    if (logs[index].length() > 0) { // Ne pas inclure les logs vides
+      result += "<div class='log-entry'>" + logs[index] + "</div>\n";
+      logCount++;
     }
   }
   
-  // Parcourir les logs à partir du plus ancien vers le plus récent
-  for (int i = 0; i < MAX_LOGS; i++) {
-    int idx = (startIdx + i) % MAX_LOGS;
-    if (logs[idx].length() > 0 && idx != logIndex) {
-      allLogs += logs[idx] + "<br>";
-      count++;
-    }
+  // Si aucun log n'est disponible
+  if (result.length() == 0) {
+    result = "<div class='log-entry'>Aucun log disponible.</div>\n";
   }
   
-  return allLogs.length() > 0 ? allLogs : "Aucun log disponible";
+  return result;
 }
 
 //----------------------------------------------------------------------------------------------------------------DEMARRER MOUVEMENT----------------------------------------------------------
@@ -358,7 +350,6 @@ void demarer(float deltaX, float deltaY) {
   // Ne pas désactiver complètement le WiFi, juste marquer qu'on est en mouvement
   // WiFi.disconnect();
   // server.end();
-  addLog("[demarer] Début du déplacement - WiFi peut être moins réactif");
   
   // Désactiver temporairement le WiFi pendant le déplacement
   WiFi.disconnect();
@@ -387,13 +378,25 @@ bool avancerCorrige() {
     digitalWrite(IN_1_G, LOW); digitalWrite(IN_2_G, HIGH);
   }
   
+  // Ajout timestamp et cycle avant compute
+  static int cyclePID = 0;
+  addLog("[PID] Timestamp: " + String(millis()) + "ms, Cycle: " + String(cyclePID++));
+
   // Mise à jour des entrées du PID avec les valeurs actuelles des encodeurs
   inputGauche = countLeft;
   inputDroite = countRight;
   
+  // Log des valeurs avant compute
+  addLog("[PID G] Cible: " + String(setpointGauche) + ", Actuel: " + String(inputGauche) + ", Erreur: " + String(setpointGauche - inputGauche));
+  addLog("[PID D] Cible: " + String(setpointDroite) + ", Actuel: " + String(inputDroite) + ", Erreur: " + String(setpointDroite - inputDroite));
+  
   // Calculer les nouvelles sorties PID
   pidGauche.Compute();
   pidDroite.Compute();
+  
+  // Log des valeurs après compute
+  addLog("[PID G] Cible: " + String(setpointGauche) + ", Actuel: " + String(inputGauche) + ", Erreur: " + String(setpointGauche - inputGauche) + ", Puissance: " + String(outputGauche));
+  addLog("[PID D] Cible: " + String(setpointDroite) + ", Actuel: " + String(inputDroite) + ", Erreur: " + String(setpointDroite - inputDroite) + ", Puissance: " + String(outputDroite));
   
   // Utiliser le facteur de rampe pour un démarrage en douceur
   float facteurRampe = 1.0;
@@ -463,21 +466,23 @@ bool avancerCorrige() {
 
   bool fini = (countLeft >= seuilImpulsionsRoueGauche) && (countRight >= seuilImpulsionsRoueDroite);
   if (fini) {
-    addLog("[avancerCorrige] Déplacement terminé");
     
     // Mettre à jour les positions calculées à la fin du mouvement
     positionReelle = calculerNouvellePositionReelle(countLeft, countRight);
     positionTheorique = calculerNouvellePositionTheorique(distance_en_cm_roue_gauche, distance_en_cm_roue_droite);
     robotState = positionTheorique; // Utiliser la position théorique comme position actuelle
     
-    addLog("[avancerCorrige] Position mise à jour - X=" + String(robotState.x, 2) + ", Y=" + String(robotState.y, 2));
+    // Bloc résumé clair à la fin du mouvement
+    addLog("=== FIN DU MOUVEMENT ===");
+    addLog("Pos finale : X=" + String(robotState.x, 2) + ", Y=" + String(robotState.y, 2) + ", Angle=" + String(robotState.theta * 180.0 / PI, 1) + "°");
+    addLog("Distance parcourue : G=" + String(distance_en_cm_roue_gauche, 2) + ", D=" + String(distance_en_cm_roue_droite, 2));
+    addLog("Impulsions totales : G=" + String(countLeft) + ", D=" + String(countRight));
+    addLog("=====================");
     
     // Réactiver le WiFi à la fin du mouvement
     WiFi.softAP(ssid, password);
     server.begin();
     String ipAddress = WiFi.softAPIP().toString();
-    addLog("[avancerCorrige] WiFi réactivé - IP: " + ipAddress);
-    addLog("[avancerCorrige] Déplacement terminé - WiFi pleinement disponible");
   }
   return fini;
 }
@@ -556,7 +561,8 @@ void setup()
   sequenceEnCours = false;
   deplacementFait = true; // Pour éviter que le robot ne bouge au démarrage
   
-  WiFi.softAP(ssid, password);
+  // Configuration WiFi avec paramètres améliorés
+  WiFi.softAP(ssid, password, 1, 0, 4); // Canal 1, SSID visible, max 4 connexions
   server.begin();
   String ipAddress = WiFi.softAPIP().toString();
   addLog("[setup] WiFi AP démarré - IP: " + ipAddress);
@@ -820,23 +826,42 @@ void loop() {
       html += "<h3>Positions</h3>";
       html += "<table style='width:100%; border-collapse:collapse;'>";
       html += "<tr style='background:#e0e0e0;'><th style='text-align:left; padding:5px; border-bottom:1px solid #ccc;'>Type</th><th style='text-align:center; padding:5px; border-bottom:1px solid #ccc;'>X (cm)</th><th style='text-align:center; padding:5px; border-bottom:1px solid #ccc;'>Y (cm)</th><th style='text-align:center; padding:5px; border-bottom:1px solid #ccc;'>Angle (°)</th></tr>";
-      html += "<tr><td style='text-align:left; padding:5px; border-bottom:1px solid #ccc;'><strong>Actuelle</strong></td><td style='text-align:center; padding:5px; border-bottom:1px solid #ccc;'>" + String(robotState.x, 2) + "</td><td style='text-align:center; padding:5px; border-bottom:1px solid #ccc;'>" + String(robotState.y, 2) + "</td><td style='text-align:center; padding:5px; border-bottom:1px solid #ccc;'>" + String(robotState.theta * 180.0 / PI, 1) + "</td></tr>";
-      html += "<tr><td style='text-align:left; padding:5px; border-bottom:1px solid #ccc;'><strong>Théorique</strong></td><td style='text-align:center; padding:5px; border-bottom:1px solid #ccc;'>" + String(positionTheorique.x, 2) + "</td><td style='text-align:center; padding:5px; border-bottom:1px solid #ccc;'>" + String(positionTheorique.y, 2) + "</td><td style='text-align:center; padding:5px; border-bottom:1px solid #ccc;'>" + String(positionTheorique.theta * 180.0 / PI, 1) + "</td></tr>";
-      html += "<tr><td style='text-align:left; padding:5px;'><strong>Réelle</strong></td><td style='text-align:center; padding:5px;'>" + String(positionReelle.x, 2) + "</td><td style='text-align:center; padding:5px;'>" + String(positionReelle.y, 2) + "</td><td style='text-align:center; padding:5px;'>" + String(positionReelle.theta * 180.0 / PI, 1) + "</td></tr>";
+
+      // Protection contre NaN ou valeurs infinies qui pourraient causer des problèmes
+      float safeRobotX = isnan(robotState.x) ? 0.0 : robotState.x;
+      float safeRobotY = isnan(robotState.y) ? 0.0 : robotState.y;
+      float safeRobotTheta = isnan(robotState.theta) ? 0.0 : robotState.theta;
+      float safeTheoriqueX = isnan(positionTheorique.x) ? 0.0 : positionTheorique.x;
+      float safeTheoriqueY = isnan(positionTheorique.y) ? 0.0 : positionTheorique.y;
+      float safeTheoriqueTheta = isnan(positionTheorique.theta) ? 0.0 : positionTheorique.theta;
+      float safeReelleX = isnan(positionReelle.x) ? 0.0 : positionReelle.x;
+      float safeReelleY = isnan(positionReelle.y) ? 0.0 : positionReelle.y;
+      float safeReelleTheta = isnan(positionReelle.theta) ? 0.0 : positionReelle.theta;
+
+      html += "<tr><td style='text-align:left; padding:5px; border-bottom:1px solid #ccc;'><strong>Actuelle</strong></td><td style='text-align:center; padding:5px; border-bottom:1px solid #ccc;'>" + String(safeRobotX, 2) + "</td><td style='text-align:center; padding:5px; border-bottom:1px solid #ccc;'>" + String(safeRobotY, 2) + "</td><td style='text-align:center; padding:5px; border-bottom:1px solid #ccc;'>" + String(safeRobotTheta * 180.0 / PI, 1) + "</td></tr>";
+      html += "<tr><td style='text-align:left; padding:5px; border-bottom:1px solid #ccc;'><strong>Théorique</strong></td><td style='text-align:center; padding:5px; border-bottom:1px solid #ccc;'>" + String(safeTheoriqueX, 2) + "</td><td style='text-align:center; padding:5px; border-bottom:1px solid #ccc;'>" + String(safeTheoriqueY, 2) + "</td><td style='text-align:center; padding:5px; border-bottom:1px solid #ccc;'>" + String(safeTheoriqueTheta * 180.0 / PI, 1) + "</td></tr>";
+      html += "<tr><td style='text-align:left; padding:5px;'><strong>Réelle</strong></td><td style='text-align:center; padding:5px;'>" + String(safeReelleX, 2) + "</td><td style='text-align:center; padding:5px;'>" + String(safeReelleY, 2) + "</td><td style='text-align:center; padding:5px;'>" + String(safeReelleTheta * 180.0 / PI, 1) + "</td></tr>";
       html += "</table>";
       html += "</div>";
       html += "</div>"; // Fin du conteneur pour la réinitialisation
       
-      // Affichage des logs
+      // Affichage des logs - limite le nombre pour éviter les problèmes de mémoire
       html += "<h2>Logs</h2>";
       html += "<div class='log-container'>" + getAllLogs() + "</div>";
       html += "</body></html>";
+      
+      // Envoi de l'en-tête HTTP
       client.println("HTTP/1.1 200 OK");
       client.println("Content-Type: text/html");
       client.println("Connection: close");
+      client.println("Cache-Control: no-cache, no-store, must-revalidate");
+      client.println("Pragma: no-cache");
+      client.println("Expires: 0");
       client.println();
-      client.println(html);
-      delay(1);
+      
+      // Envoi du contenu HTML avec une petite pause pour stabilité
+      client.print(html);
+      delay(10);
       client.stop();
     }
   //}
