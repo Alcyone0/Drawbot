@@ -60,7 +60,7 @@ double Ki_G = 0.05;    // Coefficient intégrateur roue gauche
 double Kd_G = 0.0;    // Coefficient dérivé roue gauche
 
 double Kp_D = 8.0;    // Coefficient proportionnel roue droite
-double Ki_D = 0.1;    // Coefficient intégrateur roue droite
+double Ki_D = 0.15;    // Coefficient intégrateur roue droite
 double Kd_D = 0.0;    // Coefficient dérivé roue droite
 
 // Variables pour le nouveau PID
