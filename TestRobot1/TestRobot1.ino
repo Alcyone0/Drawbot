@@ -25,11 +25,12 @@ const int encoderRightA = 33;
 
 // === Magnetometre ===
 #define MAG_ADDR 0x1E
-const float offsetX = 1973.5;
-const float offsetY = -2641.5;
+const float offsetX = -1178;
+const float offsetY = -844;
 const float TOLERANCE = 2.0;
 bool orienterVersNord = false;
 bool nordAtteint = true;
+bool avancerApresNord = false; // Flag pour déclencher l'avancement après orientation nord
 
 // === Variables ===
 volatile long countLeft = 0;
@@ -409,11 +410,27 @@ void loop() {
     if (abs(erreur) <= TOLERANCE) {
       arreter();
       nordAtteint = true;
+      avancerApresNord = true; // Déclencher l'avancement après avoir atteint le nord
+      Serial.println("Nord atteint, déclenchement avance automatique de 10cm");
     } else if (erreur > 0) {
       gauche(pwm, 60);
     } else {
       droite(pwm, 60);
     }
     delay(250);
+  }
+  
+  // Séquence automatique après avoir trouvé le nord
+  if (avancerApresNord && nordAtteint) {
+    avancerApresNord = false; // Réinitialiser le flag pour éviter de répéter l'action
+    Serial.println("Démarrage séquence après orientation nord");
+
+    avancerPrecisement(10);
+    delay(500); // Pause pour stabilisation
+    
+    reculerPrecisement(10);
+    delay(500); // Pause pour stabilisation
+
+    avancerPrecisement(10);
   }
 }
