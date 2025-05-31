@@ -376,7 +376,7 @@ void phase2() {
   addLog("Phase 2 terminée - Encodeurs D/G: " + String(countRight) + "/" + String(countLeft));
 }
 
-// Fonction principale de la séquence
+// Fonction principale de la séquence escalier
 void sequenceEscalier() {
   // Vider les logs précédents seulement si demandé
   if (logMessages.length() > 0) {
@@ -399,7 +399,89 @@ void sequenceEscalier() {
   phase2();             
   delay(300);           // Stabilisation
   
-  addLog("=== Fin de la séquence ===");
+  addLog("=== Fin de la séquence escalier ===");
+}
+
+// Fonction pour la séquence Rose des vents - version simple et non bloquante
+void sequenceRoseDesVents() {
+  // Vider les logs précédents seulement si demandé
+  if (logMessages.length() > 0) {
+    addLog("=== Début de la séquence ROSE DES VENTS ===");
+  } else {
+    logMessages = "";
+    addLog("=== Début de la séquence ROSE DES VENTS ===");
+  }
+  
+  // Déclencher la recherche du nord
+  nordAtteint = false;
+  orienterVersNord = true;
+  addLog("Recherche du nord en cours...");
+  
+  // Attendre que le robot s'oriente vers le nord
+  // Cette partie est gérée par le code d'orientation au nord dans loop()
+  while (!nordAtteint && millis() % 50 == 0) {
+    // Vérifie périodiquement et permet à d'autres fonctions de s'exécuter
+    yield();
+  }
+  
+  if (nordAtteint) {
+    addLog("Nord atteint, début de l'aller-retour");
+    delay(300); // Stabilisation
+    
+    // Avancer de 10 cm vers le nord
+    addLog("Aller: Avancer de 10cm vers le nord");
+    avancerCM(10);
+    delay(500); // Pause
+    
+    // Reculer de 10 cm (revenir au point de départ)
+    addLog("Retour: Reculer de 10cm");
+    
+    // Pour reculer, on inverse la direction des moteurs
+    digitalWrite(IN_1_D, LOW); digitalWrite(IN_2_D, HIGH);
+    digitalWrite(IN_1_G, HIGH); digitalWrite(IN_2_G, LOW);
+    
+    // Réinitialiser les compteurs d'encodeurs
+    countLeft = 0;
+    countRight = 0;
+    erreurAvant = 0;
+    cumulErreurs = 0;
+    
+    // Reculer jusqu'à atteindre 10cm (même principe que avancerCM mais en arrière)
+    long seuilReculer = 10 * IMPULSIONS_PAR_CM;
+    unsigned long startTime = millis();
+    while ((countLeft + countRight) / 2 < seuilReculer && millis() - startTime < 8000) {
+      float delta = (float)countLeft - (float)countRight; // Erreur entre les roues
+      float corr = ajustementPID(delta, coefP1);
+
+      int valD = constrain(vitesseDroite1 + corr, 0, 255); // Appliquer la correction
+      int valG = constrain(vitesseGauche1 - corr, 0, 255);
+
+      analogWrite(EN_D, valD); 
+      analogWrite(EN_G, valG);
+      
+      if (logEncoders && millis() - lastLogTime > 200) {
+        addLog("Recule Enc D/G: " + String(countRight) + "/" + String(countLeft) + 
+              ", Écart: " + String(delta, 1) + ", PWM D/G: " + String(valD) + "/" + String(valG));
+        lastLogTime = millis();
+      }
+      
+      // Permettre aux autres fonctions de s'exécuter
+      if (millis() % 20 == 0) {
+        yield();
+      }
+      
+      delay(10); // Petit délai pour ne pas surcharger le processeur
+    }
+    
+    arreter();
+    addLog("=== Fin de la séquence Rose des vents ===");
+  } else {
+    addLog("La séquence Rose des vents a été interrompue");
+  }
+  
+  // Désactiver l'orientation au nord pour les prochaines commandes
+  orienterVersNord = false;
+  nordAtteint = true;
 }
 
 void setup() {
@@ -431,6 +513,7 @@ void setup() {
 }
 
 void loop() {
+  // Traitement WiFi
   WiFiClient client = server.available();
   if (client) {
     while (!client.available()) delay(1);
@@ -467,6 +550,14 @@ void loop() {
         nordAtteint = true;
         orienterVersNord = false;
         sequenceEscalier();
+      }
+      
+      pos = request.indexOf("rosedesvents=1");
+      if (pos != -1) {
+        // Démarrer la séquence Rose des vents
+        nordAtteint = false;
+        orienterVersNord = true;
+        sequenceRoseDesVents();
       }
     
       // === Contrôles des paramètres d'escalier ===
@@ -552,6 +643,9 @@ void loop() {
     
     html += "<form method='GET' onsubmit='refreshPage()'><input type='hidden' name='escalier' value='1'>";
     html += "<input type='submit' value='Séquence Escalier'></form>";
+    
+    html += "<form method='GET' onsubmit='refreshPage()'><input type='hidden' name='rosedesvents' value='1'>";  
+    html += "<input type='submit' value='Rose des Vents'></form>";
     html += "</div>";
     
     // Paramètres Phase 1
