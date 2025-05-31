@@ -186,15 +186,125 @@ void calibrerGyro() {
   biaisGyroZ = somme / N;
 }
 
+// === Paramètres de l'escalier ===
+const int seuil1 = 195;             // Nombre de ticks pour la phase 1
+const int seuil2 = 1400;            // Nombre de ticks pour la phase 2
+const float coefP1 = 0.5;           // Coefficient proportionnel PID pour phase 1
+const float coefP2 = 0.11;          // Coefficient proportionnel PID pour phase 2
+
+// === PWM de base pour les moteurs ===
+// PWM initialement déséquilibrés pour corriger la trajectoire dés le départ
+const int vitesseDroite1 = 110;     // Moteur droit plus rapide
+const int vitesseGauche1 = 15;      // Moteur gauche plus lent
+const int vitesseDroite2 = 60;      // Valeurs équilibrées pour phase 2
+const int vitesseGauche2 = 60;
+
+// === PID interne ===
+float erreurActuelle = 0;           // Différence actuelle entre les deux roues
+float erreurAvant = 0;              // Dernière erreur connue (pour dérivée)
+float cumulErreurs = 0;             // Somme des erreurs (intégrale)
+
+// Fonction générique de calcul PID
+float ajustementPID(float err, float kp) {
+  cumulErreurs += err;              // Mise à jour du cumul d'erreurs
+  float sortie = kp * err;          // Seulement le terme proportionnel ici
+  erreurAvant = err;                // Stockage de l'erreur pour la prochaine boucle
+  return sortie;                    // Retourne la correction calculée
+}
+
+// Fonction pour avancer d'une certaine distance (en cm) en ligne droite
+void avancerCM(float cm) {
+  long cible = cm * IMPULSIONS_PAR_CM;     // Conversion de la distance en ticks
+  countLeft = 0;                    // Réinitialisation des compteurs d'encodeurs
+  countRight = 0;
+  erreurAvant = 0;                  // Réinitialisation PID
+  cumulErreurs = 0;
+
+  int pwmG = vitesseGauche1;        // PWM initial gauche (déséquilibré exprès)
+  int pwmD = vitesseDroite1;        // PWM initial droit
+
+  while ((countLeft + countRight) / 2 < cible) {   // Condition d'arrêt basée sur moyenne
+    float delta = (float)countLeft - (float)countRight; // Erreur entre les roues
+    float corr = ajustementPID(delta, coefP1);          // Correction PID
+
+    int valD = constrain(pwmD + corr, 0, 255);     // Application correction droite
+    int valG = constrain(pwmG - corr, 0, 255);     // Application correction gauche
+
+    // Commande des moteurs : avancer (marche avant opposée entre D et G)
+    digitalWrite(IN_1_D, HIGH); digitalWrite(IN_2_D, LOW);
+    digitalWrite(IN_1_G, LOW);  digitalWrite(IN_2_G, HIGH);
+    analogWrite(EN_D, valD);    // PWM moteur droit
+    analogWrite(EN_G, valG);    // PWM moteur gauche
+
+    delay(20);                  // Temporisation pour éviter surcharge CPU
+  }
+  arreter();                    // Stoppe les moteurs à la fin
+}
+
+// Étape 1 : avance d'un petit segment
+void phase1() {
+  countLeft = 0;
+  countRight = 0;
+  erreurAvant = 0;
+  cumulErreurs = 0;
+  
+  Serial.println("Phase 1 démarrage");
+
+  while (countRight < seuil1) {     // Avance jusqu'à un nombre de ticks
+    float ecart = (float)countLeft - (float)countRight; // Écart entre les roues
+    float corr = ajustementPID(ecart, coefP1);          // Correction PID
+
+    int valD = constrain(vitesseDroite1 + corr, 0, 255); // PWM corrigée
+    int valG = constrain(vitesseGauche1 - corr, 0, 255);
+
+    digitalWrite(IN_1_D, HIGH); digitalWrite(IN_2_D, LOW);
+    digitalWrite(IN_1_G, LOW);  digitalWrite(IN_2_G, HIGH);
+    analogWrite(EN_D, valD);
+    analogWrite(EN_G, valG);
+
+    delay(20);
+  }
+  arreter();
+  Serial.println("Phase 1 terminée");
+}
+
+// Étape 2 : avance d'un long segment (droite)
+void phase2() {
+  countLeft = 0;
+  countRight = 0;
+  erreurAvant = 0;
+  cumulErreurs = 0;
+  
+  Serial.println("Phase 2 démarrage");
+
+  while (countLeft < seuil2) {
+    float ecart = (float)countLeft - (float)countRight;
+    float corr = ajustementPID(ecart, coefP2);
+
+    int valD = constrain(vitesseDroite2 + corr, 0, 255);
+    int valG = constrain(vitesseGauche2 - corr, 0, 255);
+
+    digitalWrite(IN_1_D, HIGH); digitalWrite(IN_2_D, LOW);
+    digitalWrite(IN_1_G, LOW);  digitalWrite(IN_2_G, HIGH);
+    analogWrite(EN_D, valD);
+    analogWrite(EN_G, valG);
+
+    delay(20);
+  }
+  arreter();
+  Serial.println("Phase 2 terminée");
+}
+
+// Fonction principale de la séquence
 void sequenceEscalier() {
-  Serial.println("=== Sequence ESCALIER (test 2 marches) ===");
-  avancerPrecisement(20);
-  reculerPrecisement(10);
-  rotation(90);
-  avancerPrecisement(10);
-  reculerPrecisement(10);
-  rotation(-90);
-  Serial.println("=== Fin sequence ===");
+  Serial.println("=== Début de la séquence ESCALIER ===");
+  avancerCM(20);        // Premier déplacement
+  delay(300);           // Stabilisation
+  phase1();             // Petite marche
+  delay(300);           // Stabilisation
+  phase2();             // Grande marche
+  delay(300);           // Stabilisation
+  Serial.println("=== Fin de la séquence ===");
 }
 
 void setup() {
