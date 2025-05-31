@@ -356,6 +356,10 @@ void loop() {
     if (pos != -1) {
       rotation(90);
     }
+    pos = request.indexOf("angle360=1");
+    if (pos != -1) {
+      rotation(360);
+    }
     pos = request.indexOf("nord=1");
     if (pos != -1) {
       nordAtteint = false;
@@ -379,6 +383,8 @@ void loop() {
     html += "<input type='submit' value='Avancer'></form><br><br>";
     html += "<form method='GET'><input type='hidden' name='angle90' value='1'>";
     html += "<input type='submit' value='Angle droit 90 deg'></form><br><br>";
+    html += "<form method='GET'><input type='hidden' name='angle360' value='1'>";
+    html += "<input type='submit' value='Rotation compl\u00e8te 360 deg'></form><br><br>";
     html += "<form method='GET'><input type='hidden' name='nord' value='1'>";
     html += "<input type='submit' value='Indiquer le Nord'></form><br><br>";
     html += "<form method='GET'><input type='hidden' name='escalier' value='1'>";
