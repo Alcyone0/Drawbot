@@ -186,18 +186,46 @@ void calibrerGyro() {
   biaisGyroZ = somme / N;
 }
 
-// === Paramètres de l'escalier ===
-const int seuil1 = 195;             // Nombre de ticks pour la phase 1
-const int seuil2 = 1400;            // Nombre de ticks pour la phase 2
-const float coefP1 = 0.5;           // Coefficient proportionnel PID pour phase 1
-const float coefP2 = 0.11;          // Coefficient proportionnel PID pour phase 2
+// === Système de logs ===
+String logMessages = "";            // Buffer pour stocker les messages de log
+int maxLogLines = 20;               // Nombre maximal de lignes de log à conserver
+
+// Fonction pour ajouter un message au log
+void addLog(String message) {
+  String timestamp = String(millis()/1000.0, 1) + "s: "; // Horodatage en secondes
+  logMessages = timestamp + message + "<br>" + logMessages;
+  
+  // Limiter le nombre de lignes dans le log
+  int count = 0;
+  int index = 0;
+  while ((index = logMessages.indexOf("<br>", index + 1)) != -1) {
+    count++;
+    if (count >= maxLogLines) {
+      logMessages = logMessages.substring(0, index + 4);
+      break;
+    }
+  }
+  
+  // Afficher aussi sur le moniteur série
+  Serial.println(timestamp + message);
+}
+
+// === Paramètres de l'escalier (variables ajustables) ===
+int seuil1 = 195;             // Nombre de ticks pour la phase 1
+int seuil2 = 1400;            // Nombre de ticks pour la phase 2
+float coefP1 = 0.5;           // Coefficient proportionnel PID pour phase 1
+float coefP2 = 0.11;          // Coefficient proportionnel PID pour phase 2
 
 // === PWM de base pour les moteurs ===
-// PWM initialement déséquilibrés pour corriger la trajectoire dés le départ
-const int vitesseDroite1 = 110;     // Moteur droit plus rapide
-const int vitesseGauche1 = 15;      // Moteur gauche plus lent
-const int vitesseDroite2 = 60;      // Valeurs équilibrées pour phase 2
-const int vitesseGauche2 = 60;
+// PWM initialement déséquilibrés pour corriger la trajectoire dès le départ
+int vitesseDroite1 = 110;     // Moteur droit plus rapide pour phase 1
+int vitesseGauche1 = 15;      // Moteur gauche plus lent pour phase 1
+int vitesseDroite2 = 60;      // Valeurs équilibrées pour phase 2
+int vitesseGauche2 = 60;      // Valeurs équilibrées pour phase 2
+
+// Variables pour suivre l'état de l'exécution
+bool logEncoders = false;     // Activer/désactiver le log des encodeurs
+long lastLogTime = 0;         // Dernière fois qu'un log a été envoyé
 
 // === PID interne ===
 float erreurActuelle = 0;           // Différence actuelle entre les deux roues
@@ -248,7 +276,7 @@ void phase1() {
   erreurAvant = 0;
   cumulErreurs = 0;
   
-  Serial.println("Phase 1 démarrage");
+  addLog("Phase 1 démarrage - Seuil: " + String(seuil1) + ", PWM D/G: " + String(vitesseDroite1) + "/" + String(vitesseGauche1) + ", coefP: " + String(coefP1));
 
   while (countRight < seuil1) {     // Avance jusqu'à un nombre de ticks
     float ecart = (float)countLeft - (float)countRight; // Écart entre les roues
@@ -262,10 +290,15 @@ void phase1() {
     analogWrite(EN_D, valD);
     analogWrite(EN_G, valG);
 
+    // Log des encodeurs et corrections si activé
+    if (logEncoders && millis() - lastLogTime > 200) { // Log toutes les 200ms
+      addLog("P1 Enc D/G: " + String(countRight) + "/" + String(countLeft) + ", Écart: " + String(ecart, 1) + ", Corr: " + String(corr, 2) + ", PWM D/G: " + String(valD) + "/" + String(valG));
+      lastLogTime = millis();
+    }
     delay(20);
   }
   arreter();
-  Serial.println("Phase 1 terminée");
+  addLog("Phase 1 terminée - Encodeurs D/G: " + String(countRight) + "/" + String(countLeft));
 }
 
 // Étape 2 : avance d'un long segment (droite)
@@ -275,7 +308,7 @@ void phase2() {
   erreurAvant = 0;
   cumulErreurs = 0;
   
-  Serial.println("Phase 2 démarrage");
+  addLog("Phase 2 démarrage - Seuil: " + String(seuil2) + ", PWM D/G: " + String(vitesseDroite2) + "/" + String(vitesseGauche2) + ", coefP: " + String(coefP2));
 
   while (countLeft < seuil2) {
     float ecart = (float)countLeft - (float)countRight;
@@ -288,23 +321,38 @@ void phase2() {
     digitalWrite(IN_1_G, LOW);  digitalWrite(IN_2_G, HIGH);
     analogWrite(EN_D, valD);
     analogWrite(EN_G, valG);
-
+    
+    // Log des encodeurs et corrections si activé
+    if (logEncoders && millis() - lastLogTime > 200) {
+      addLog("P2 Enc D/G: " + String(countRight) + "/" + String(countLeft) + ", Écart: " + String(ecart, 1) + ", Corr: " + String(corr, 2) + ", PWM D/G: " + String(valD) + "/" + String(valG));
+      lastLogTime = millis();
+    }
     delay(20);
   }
   arreter();
-  Serial.println("Phase 2 terminée");
+  addLog("Phase 2 terminée - Encodeurs D/G: " + String(countRight) + "/" + String(countLeft));
 }
 
 // Fonction principale de la séquence
 void sequenceEscalier() {
-  Serial.println("=== Début de la séquence ESCALIER ===");
-  avancerCM(20);        // Premier déplacement
+  // Vider les logs précédents
+  logMessages = "";
+  addLog("=== Début de la séquence ESCALIER ===");
+  
+  // Premier déplacement en ligne droite
+  addLog("Démarrage avancerCM(20)");
+  avancerCM(20);        
   delay(300);           // Stabilisation
-  phase1();             // Petite marche
+  
+  // Phase 1 - petite marche avec déséquilibre intentionnel
+  phase1();            
   delay(300);           // Stabilisation
-  phase2();             // Grande marche
+  
+  // Phase 2 - grande marche droite
+  phase2();             
   delay(300);           // Stabilisation
-  Serial.println("=== Fin de la séquence ===");
+  
+  addLog("=== Fin de la séquence ===");
 }
 
 void setup() {
@@ -342,8 +390,15 @@ void loop() {
     String request = client.readStringUntil('\r');
     client.flush();
     int pos;
-    pos = request.indexOf("d=");
-    if (pos != -1) {
+    
+    // Vérifier si c'est une requête de commande ou juste un chargement de page
+    bool isCommandRequest = request.indexOf("GET /?" ) != -1;
+    // Ne traiter les commandes que si c'est une requête avec paramètres
+    
+    // === Commandes de base ===
+    if (isCommandRequest) {
+      pos = request.indexOf("d=");
+      if (pos != -1) {
       float val = request.substring(pos + 2).toFloat();
       distanceCM = val;
       seuilImpulsions = distanceCM * IMPULSIONS_PAR_CM;
@@ -351,37 +406,180 @@ void loop() {
       deplacementFait = false;
       correctionActive = true;
     }
-    pos = request.indexOf("angle90=1");
-    if (pos != -1) {
-      rotation(90);
+      pos = request.indexOf("angle90=1");
+      if (pos != -1) {
+        rotation(90);
+      }
+      pos = request.indexOf("nord=1");
+      if (pos != -1) {
+        nordAtteint = false;
+        orienterVersNord = true;
+      }
+      pos = request.indexOf("escalier=1");
+      if (pos != -1) {
+        nordAtteint = true;
+        orienterVersNord = false;
+        sequenceEscalier();
+      }
+    
+      // === Contrôles des paramètres d'escalier ===
+      // Paramètres Phase 1
+      pos = request.indexOf("vd1=");
+      if (pos != -1) vitesseDroite1 = request.substring(pos + 4).toInt();
+      
+      pos = request.indexOf("vg1=");
+      if (pos != -1) vitesseGauche1 = request.substring(pos + 4).toInt();
+      
+      pos = request.indexOf("s1=");
+      if (pos != -1) seuil1 = request.substring(pos + 3).toInt();
+      
+      pos = request.indexOf("kp1=");
+      if (pos != -1) coefP1 = request.substring(pos + 4).toFloat();
+      
+      // Paramètres Phase 2
+      pos = request.indexOf("vd2=");
+      if (pos != -1) vitesseDroite2 = request.substring(pos + 4).toInt();
+      
+      pos = request.indexOf("vg2=");
+      if (pos != -1) vitesseGauche2 = request.substring(pos + 4).toInt();
+      
+      pos = request.indexOf("s2=");
+      if (pos != -1) seuil2 = request.substring(pos + 3).toInt();
+      
+      pos = request.indexOf("kp2=");
+      if (pos != -1) coefP2 = request.substring(pos + 4).toFloat();
+      
+      // Contrôle des logs
+      pos = request.indexOf("log_enc=1");
+      if (pos != -1) logEncoders = true;
+      
+      pos = request.indexOf("log_enc=0");
+      if (pos != -1) logEncoders = false;
+      
+      pos = request.indexOf("clear_log=1");
+      if (pos != -1) logMessages = "";
     }
-    pos = request.indexOf("nord=1");
-    if (pos != -1) {
-      nordAtteint = false;
-      orienterVersNord = true;
-    }
-    pos = request.indexOf("escalier=1");
-    if (pos != -1) {
-      nordAtteint = true;
-      orienterVersNord = false;
-      sequenceEscalier();
-    }
+    
+    // Construction de la page HTML
     String html = "<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Drawbot</title>";
-    html += "<style>body{background:#ffe6f0;font-family:Arial;text-align:center;padding:40px;}";
-    html += "form{background:#fff;padding:25px;border-radius:12px;box-shadow:0 0 10px #cc0066;display:inline-block;}";
-    html += "input{padding:10px;margin:10px;border-radius:5px;}";
-    html += "input[type=submit]{background:#ff66a3;color:white;border:none;cursor:pointer;}";
-    html += "input[type=submit]:hover{background:#cc0066;}</style></head><body>";
-    html += "<h1>Commandes Drawbot</h1>";
-    html += "<form method='GET'><label>Distance (cm)</label><br>";
-    html += "<input type='number' name='d' min='1' max='100'><br>";
-    html += "<input type='submit' value='Avancer'></form><br><br>";
+    html += "<style>";
+    html += "body{background:#f0f8ff;font-family:Arial;text-align:center;padding:20px;}";
+    html += "h1{color:#003366;}";
+    html += "h2{color:#0066cc;margin-top:30px;}";
+    html += "form{background:#fff;padding:15px;border-radius:8px;box-shadow:0 0 5px #0099cc;display:inline-block;margin:10px;min-width:250px;vertical-align:top;}";
+    html += "input, select{padding:8px;margin:5px;border-radius:4px;border:1px solid #ccc;}";
+    html += "input[type=submit]{background:#0099cc;color:white;border:none;cursor:pointer;}";
+    html += "input[type=submit]:hover{background:#0077aa;}";
+    html += "label{display:inline-block;width:120px;text-align:right;margin-right:10px;}";
+    html += "table{margin:10px auto;border-collapse:collapse;width:80%;}";
+    html += "th, td{border:1px solid #ddd;padding:8px;text-align:left;}";
+    html += "th{background-color:#f2f2f2;}";
+    html += ".log-container{background:#fff;padding:15px;border-radius:8px;box-shadow:0 0 5px #0099cc;margin:20px auto;max-width:800px;max-height:400px;overflow-y:auto;text-align:left;}";
+    html += ".current-values{font-weight:bold;color:#0066cc;}";
+    html += "</style>";
+    html += "<script>";
+    html += "function updateSliderValue(sliderId, valueId) {";
+    html += "  document.getElementById(valueId).innerHTML = document.getElementById(sliderId).value;";
+    html += "}";
+    html += "function refreshPage() {";
+    html += "  setTimeout(function(){ location.reload(); }, 2000);";
+    html += "}";
+    html += "</script>";
+    html += "</head><body>";
+    
+    // En-tête
+    html += "<h1>Drawbot - Contrôle et Diagnostic</h1>";
+    
+    // Commandes de base
+    html += "<h2>Commandes de Base</h2>";
+    html += "<div style='display:flex;justify-content:center;flex-wrap:wrap;'>";
+    html += "<form method='GET'><label>Distance (cm)</label>";
+    html += "<input type='number' name='d' min='1' max='100' value='20'><br>";
+    html += "<input type='submit' value='Avancer'></form>";
+    
     html += "<form method='GET'><input type='hidden' name='angle90' value='1'>";
-    html += "<input type='submit' value='Angle droit 90 deg'></form><br><br>";
+    html += "<input type='submit' value='Rotation 90°'></form>";
+    
     html += "<form method='GET'><input type='hidden' name='nord' value='1'>";
-    html += "<input type='submit' value='Indiquer le Nord'></form><br><br>";
-    html += "<form method='GET'><input type='hidden' name='escalier' value='1'>";
-    html += "<input type='submit' value='Tracer escalier'></form></body></html>";
+    html += "<input type='submit' value='Orienter Nord'></form>";
+    
+    html += "<form method='GET' onsubmit='refreshPage()'><input type='hidden' name='escalier' value='1'>";
+    html += "<input type='submit' value='Séquence Escalier'></form>";
+    html += "</div>";
+    
+    // Paramètres Phase 1
+    html += "<h2>Paramètres Phase 1 (Petite Marche)</h2>";
+    html += "<div style='display:flex;justify-content:center;flex-wrap:wrap;'>";
+    html += "<form method='GET'>";
+    html += "<div><label>PWM Droite:</label>";
+    html += "<input type='range' id='vd1Slider' name='vd1' min='0' max='255' value='" + String(vitesseDroite1) + "' oninput='updateSliderValue(\"vd1Slider\", \"vd1Value\")'>";
+    html += "<span id='vd1Value'>" + String(vitesseDroite1) + "</span></div>";
+    
+    html += "<div><label>PWM Gauche:</label>";
+    html += "<input type='range' id='vg1Slider' name='vg1' min='0' max='255' value='" + String(vitesseGauche1) + "' oninput='updateSliderValue(\"vg1Slider\", \"vg1Value\")'>";
+    html += "<span id='vg1Value'>" + String(vitesseGauche1) + "</span></div>";
+    
+    html += "<div><label>Seuil (ticks):</label>";
+    html += "<input type='number' name='s1' min='50' max='1000' value='" + String(seuil1) + "'></div>";
+    
+    html += "<div><label>Coef. PID:</label>";
+    html += "<input type='number' name='kp1' min='0.01' max='2' step='0.01' value='" + String(coefP1, 2) + "'></div>";
+    
+    html += "<input type='submit' value='Mettre à jour Phase 1'></form>";
+    html += "</div>";
+    
+    // Paramètres Phase 2
+    html += "<h2>Paramètres Phase 2 (Grande Marche)</h2>";
+    html += "<div style='display:flex;justify-content:center;flex-wrap:wrap;'>";
+    html += "<form method='GET'>";
+    html += "<div><label>PWM Droite:</label>";
+    html += "<input type='range' id='vd2Slider' name='vd2' min='0' max='255' value='" + String(vitesseDroite2) + "' oninput='updateSliderValue(\"vd2Slider\", \"vd2Value\")'>";
+    html += "<span id='vd2Value'>" + String(vitesseDroite2) + "</span></div>";
+    
+    html += "<div><label>PWM Gauche:</label>";
+    html += "<input type='range' id='vg2Slider' name='vg2' min='0' max='255' value='" + String(vitesseGauche2) + "' oninput='updateSliderValue(\"vg2Slider\", \"vg2Value\")'>";
+    html += "<span id='vg2Value'>" + String(vitesseGauche2) + "</span></div>";
+    
+    html += "<div><label>Seuil (ticks):</label>";
+    html += "<input type='number' name='s2' min='500' max='5000' value='" + String(seuil2) + "'></div>";
+    
+    html += "<div><label>Coef. PID:</label>";
+    html += "<input type='number' name='kp2' min='0.01' max='2' step='0.01' value='" + String(coefP2, 2) + "'></div>";
+    
+    html += "<input type='submit' value='Mettre à jour Phase 2'></form>";
+    html += "</div>";
+    
+    // Contrôle des logs
+    html += "<h2>Logs et Diagnostic</h2>";
+    html += "<div style='display:flex;justify-content:center;flex-wrap:wrap;'>";
+    html += "<form method='GET'>";
+    html += "<input type='hidden' name='log_enc' value='" + String(logEncoders ? "0" : "1") + "'>";
+    html += "<input type='submit' value='" + String(logEncoders ? "Désactiver" : "Activer") + " logs encodeurs'></form>";
+    
+    html += "<form method='GET'><input type='hidden' name='clear_log' value='1'>";
+    html += "<input type='submit' value='Effacer logs'></form>";
+    html += "</div>";
+    
+    // Affichage des logs
+    html += "<div class='log-container'>";
+    if (logMessages.length() > 0) {
+      html += logMessages;
+    } else {
+      html += "<i>Aucun log disponible. Exécutez la séquence escalier pour générer des logs.</i>";
+    }
+    html += "</div>";
+    
+    // Tableau récapitulatif des valeurs actuelles
+    html += "<h2>Valeurs Actuelles</h2>";
+    html += "<table>";
+    html += "<tr><th colspan='2'>Phase 1</th><th colspan='2'>Phase 2</th></tr>";
+    html += "<tr><td>PWM Droite</td><td>" + String(vitesseDroite1) + "</td><td>PWM Droite</td><td>" + String(vitesseDroite2) + "</td></tr>";
+    html += "<tr><td>PWM Gauche</td><td>" + String(vitesseGauche1) + "</td><td>PWM Gauche</td><td>" + String(vitesseGauche2) + "</td></tr>";
+    html += "<tr><td>Seuil</td><td>" + String(seuil1) + "</td><td>Seuil</td><td>" + String(seuil2) + "</td></tr>";
+    html += "<tr><td>Coef. PID</td><td>" + String(coefP1, 2) + "</td><td>Coef. PID</td><td>" + String(coefP2, 2) + "</td></tr>";
+    html += "</table>";
+    
+    html += "</body></html>";
     client.println("HTTP/1.1 200 OK");
     client.println("Content-type:text/html");
     client.println(); client.println(html); client.stop();
