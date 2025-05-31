@@ -278,7 +278,16 @@ void phase1() {
   
   addLog("Phase 1 démarrage - Seuil: " + String(seuil1) + ", PWM D/G: " + String(vitesseDroite1) + "/" + String(vitesseGauche1) + ", coefP: " + String(coefP1));
 
-  while (countRight < seuil1) {     // Avance jusqu'à un nombre de ticks
+  // Timeout de sécurité pour éviter de tourner indéfiniment
+  unsigned long startTime = millis();
+  const unsigned long TIMEOUT = 5000; // 5 secondes maximum
+  
+  // On surveille la moyenne des deux encodeurs pour plus de stabilité
+  // et on s'arrête si l'un des deux atteint 2x la valeur seuil (pour éviter les blocages)
+  while (((countRight + countLeft)/2 < seuil1) && 
+         (countRight < seuil1*2) && 
+         (countLeft < seuil1*2) && 
+         (millis() - startTime < TIMEOUT)) { // Critères d'arrêt multiples
     float ecart = (float)countLeft - (float)countRight; // Écart entre les roues
     float corr = ajustementPID(ecart, coefP1);          // Correction PID
 
@@ -298,24 +307,49 @@ void phase1() {
     delay(20);
   }
   arreter();
+  
+  // Vérifier si on est sorti par timeout
+  if (millis() - startTime >= TIMEOUT) {
+    addLog("ATTENTION: Phase 1 interrompue par timeout de sécurité! Seuil non atteint.");
+  }
+  
   addLog("Phase 1 terminée - Encodeurs D/G: " + String(countRight) + "/" + String(countLeft));
 }
 
-// Étape 2 : avance d'un long segment (droite)
+// === Étape 2 : long déplacement (droit en diagonale) ===
 void phase2() {
   countLeft = 0;
   countRight = 0;
   erreurAvant = 0;
   cumulErreurs = 0;
+
+  // ⚙️ Réglages optimisés
+  const int vitesseDroiteNew = 85;  // moins fort que la gauche 
+  const int vitesseGaucheNew = 65;  // un peu plus fort
+  const float coefPNew = 0.06;      // PID moins agressif
+
+  // On utilise des constantes locales mais on peut mettre à jour les variables globales
+  // pour que l'interface web montre les bonnes valeurs
+  vitesseDroite2 = vitesseDroiteNew;
+  vitesseGauche2 = vitesseGaucheNew;
+  coefP2 = coefPNew;
   
-  addLog("Phase 2 démarrage - Seuil: " + String(seuil2) + ", PWM D/G: " + String(vitesseDroite2) + "/" + String(vitesseGauche2) + ", coefP: " + String(coefP2));
+  addLog("Phase 2 démarrage - Seuil: " + String(seuil2) + ", PWM D/G: " + 
+          String(vitesseDroiteNew) + "/" + String(vitesseGaucheNew) + ", coefP: " + String(coefPNew));
 
-  while (countLeft < seuil2) {
+  // Timeout de sécurité pour éviter de tourner indéfiniment
+  unsigned long startTime = millis();
+  const unsigned long TIMEOUT = 10000; // 10 secondes maximum (phase 2 plus longue)
+  
+  while (((countRight + countLeft)/2 < seuil2) && (countRight < seuil2*2) && 
+         (countLeft < seuil2*2) && (millis() - startTime < TIMEOUT)) {
+         
     float ecart = (float)countLeft - (float)countRight;
-    float corr = ajustementPID(ecart, coefP2);
+    float corr = ajustementPID(ecart, coefPNew);
 
-    int valD = constrain(vitesseDroite2 + corr, 0, 255);
-    int valG = constrain(vitesseGauche2 - corr, 0, 255);
+    // 🔒 Planche minimale de PWM pour éviter blocage moteur
+    int valD = constrain(vitesseDroiteNew + corr, 60, 255);
+    int valG = constrain(vitesseGaucheNew - corr, 60, 255);
 
     digitalWrite(IN_1_D, HIGH); digitalWrite(IN_2_D, LOW);
     digitalWrite(IN_1_G, LOW);  digitalWrite(IN_2_G, HIGH);
@@ -324,20 +358,33 @@ void phase2() {
     
     // Log des encodeurs et corrections si activé
     if (logEncoders && millis() - lastLogTime > 200) {
-      addLog("P2 Enc D/G: " + String(countRight) + "/" + String(countLeft) + ", Écart: " + String(ecart, 1) + ", Corr: " + String(corr, 2) + ", PWM D/G: " + String(valD) + "/" + String(valG));
+      addLog("P2 Enc D/G: " + String(countRight) + "/" + String(countLeft) + 
+             ", Écart: " + String(ecart, 1) + ", Corr: " + String(corr, 2) + 
+             ", PWM D/G: " + String(valD) + "/" + String(valG));
       lastLogTime = millis();
     }
     delay(20);
   }
+  
   arreter();
+  
+  // Vérifier si on est sorti par timeout
+  if (millis() - startTime >= TIMEOUT) {
+    addLog("ATTENTION: Phase 2 interrompue par timeout de sécurité! Seuil non atteint.");
+  }
+  
   addLog("Phase 2 terminée - Encodeurs D/G: " + String(countRight) + "/" + String(countLeft));
 }
 
 // Fonction principale de la séquence
 void sequenceEscalier() {
-  // Vider les logs précédents
-  logMessages = "";
-  addLog("=== Début de la séquence ESCALIER ===");
+  // Vider les logs précédents seulement si demandé
+  if (logMessages.length() > 0) {
+    addLog("=== Début de la séquence ESCALIER ===");
+  } else {
+    logMessages = "";
+    addLog("=== Début de la séquence ESCALIER ===");
+  }
   
   // Premier déplacement en ligne droite
   addLog("Démarrage avancerCM(20)");
