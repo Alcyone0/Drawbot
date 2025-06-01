@@ -7,8 +7,8 @@ LSM6DS3 imu(I2C_MODE, 0x6B);
 float biaisGyroZ = 0.0;
 
 // === WiFi ===
-const char* ssid = "Seb_ESP32";
-const char* password = "98765432";
+const char* ssid = "DrawBot_WIFI";
+const char* password = "12345678";
 WiFiServer server(80);
 
 // === Encodeurs ===
@@ -226,17 +226,62 @@ void calibrerGyro() {
 
 // --- PARAMETRES ESCALIER --- //
 
-// PWM adaptés pour l'escalier
-int pwm_droite = 190;      // PWM roue droite base
-int pwm_gauche = 10;       // PWM roue gauche base
-int pwm_droite2 = 50;      // PWM roue droite 2
-int pwm_gauche2 = 110;     // PWM roue gauche 2
+// Variables modifiables dans le site web
+int distance_cm = 20;
+const float TICKS_PAR_CM = IMPULSIONS_PAR_CM; // Utilise la même valeur que le reste du code
 
-// Valeurs des coefficients de correction PID pour l'escalier
-float Kp = 0.5;    // Coefficient proportionnel
-float Kp2 = 0.11;  // Coefficient proportionnel pour la 2e étape
-float Ki = 0;
-float Kd = 0;
+// La fonction reculer a été supprimée car non utilisée
+
+// Étape 1 du déplacement en escalier
+void etape1() {
+  const int pwm_d_base = 190; // PWM roue droite base
+  const int pwm_g_base = 10;  // PWM roue gauche base
+  const int seuil_ticks = 80; // seuil ticks pour étape1 (réduit pour un virage plus court)
+
+  const float Kp = 0.5;    // Coefficient proportionnel
+  const float Ki = 0;
+  const float Kd = 0;
+
+  // Variables PID pour l'escalier
+  float erreur = 0;
+  float erreur_precedente = 0;
+  float somme_erreurs = 0;
+  float correction = 0;
+
+  digitalWrite(IN_1_D, LOW); digitalWrite(IN_2_D, HIGH);
+  digitalWrite(IN_1_G, HIGH);  digitalWrite(IN_2_G, LOW);
+    
+  while (countRight < seuil_ticks) {
+    erreur = (float)countLeft - (float)countRight;
+    somme_erreurs += erreur;
+    correction = Kp * erreur + Ki * somme_erreurs + Kd * (erreur - erreur_precedente);
+    erreur_precedente = erreur;
+
+    int pwm_d = pwm_d_base + correction;
+    int pwm_g = pwm_g_base - correction;
+
+    pwm_d = constrain(pwm_d, 0, 255);
+    pwm_g = constrain(pwm_g, 0, 255);
+    analogWrite(EN_D, pwm_d);
+    analogWrite(EN_G, pwm_g);
+
+    delay(20);
+  }
+  //arreter();
+  analogWrite(EN_D, 0); analogWrite(EN_G, 0);
+  digitalWrite(IN_1_D, LOW); digitalWrite(IN_2_D, LOW);
+  digitalWrite(IN_1_G, LOW); digitalWrite(IN_2_G, LOW);
+}
+
+// Étape 2 du déplacement en escalier
+void etape2() {
+  const int pwm_d_base = 50; // PWM roue droite base
+  const int pwm_g_base = 110;  // PWM roue gauche base
+  const int seuil_ticks = 1400; // seuil ticks pour étape1 (réduit pour un virage plus court)
+
+  float Kp = 0.11;  // Coefficient proportionnel pour la 2e étape
+  float Ki = 0;
+  float Kd = 0;
 
 // Variables PID pour l'escalier
 float erreur = 0;
@@ -244,153 +289,29 @@ float erreur_precedente = 0;
 float somme_erreurs = 0;
 float correction = 0;
 
-// Variables modifiables dans le site web
-int seuil_ticks = 80;      // seuil ticks pour étape1 (réduit pour un virage plus court)
-int seuil_ticks2 = 1400;    // seuil ticks pour étape2
-int distance_cm = 20;
-const float TICKS_PAR_CM = IMPULSIONS_PAR_CM; // Utilise la même valeur que le reste du code
-
-// Fonction pour calculer la correction PID pour l'escalier
-float calculerPID_escalier(float erreur, float Kp) {
+  digitalWrite(IN_1_D, LOW); digitalWrite(IN_2_D, HIGH);
+  digitalWrite(IN_1_G, HIGH);  digitalWrite(IN_2_G, LOW);
+    
+  while (countLeft < seuil_ticks) {
+    float erreur = (float)countLeft - (float)countRight;
     somme_erreurs += erreur;
     correction = Kp * erreur + Ki * somme_erreurs + Kd * (erreur - erreur_precedente);
     erreur_precedente = erreur;
-    return correction;
-}
 
-// Avancer d'une distance donnée en cm avec PID
-void avancerDistance(int cm) {
-    float offset_ticks = (cm - 30) * 0.5;
-    long targetTicks = cm * IMPULSIONS_PAR_CM + offset_ticks;
+    int pwm_d = pwm_d_base + correction;
+    int pwm_g = pwm_g_base - correction;
 
-    countLeft = 0;
-    countRight = 0;
-    erreur_precedente = 0;
-    somme_erreurs = 0;
+    pwm_d = constrain(pwm_d, 0, 255);
+    pwm_g = constrain(pwm_g, 0, 255);
+    analogWrite(EN_D, pwm_d);
+    analogWrite(EN_G, pwm_g);
 
-    int pwm_d_base = 60;
-    int pwm_g_base = 60;
-
-    Serial.print("Début avancerDistance: "); Serial.print(cm); Serial.println(" cm");
-
-    while ((countLeft + countRight) / 2 < targetTicks) {
-        float erreur_ticks = (float)countLeft - (float)countRight;
-        float pid = calculerPID_escalier(erreur_ticks, Kp);
-
-        int pwm_d = pwm_d_base + pid;
-        int pwm_g = pwm_g_base - pid;
-
-        pwm_d = constrain(pwm_d, 0, 255);
-        pwm_g = constrain(pwm_g, 0, 255);
-
-        // INVERSION des directions pour correspondre au projet existant
-        digitalWrite(IN_1_D, LOW); digitalWrite(IN_2_D, HIGH);
-        digitalWrite(IN_1_G, HIGH);  digitalWrite(IN_2_G, LOW);
-        analogWrite(EN_D, pwm_d);
-        analogWrite(EN_G, pwm_g);
-
-        // Log pour débogage tous les 100 ticks
-        if ((countLeft + countRight) % 100 == 0) {
-            Serial.print("[avancerDistance] Ticks: ");
-            Serial.print((countLeft + countRight) / 2);
-            Serial.print("/"); Serial.print(targetTicks);
-            Serial.print(" D/G: "); Serial.print(countRight);
-            Serial.print("/"); Serial.println(countLeft);
-        }
-
-        delay(20); // boucle PID rapide
-    }
-    arreter();
-    Serial.println("Fin avancerDistance");
-}
-
-// La fonction reculer a été supprimée car non utilisée
-
-// Étape 1 du déplacement en escalier
-void etape1() {
-    countLeft = 0;
-    countRight = 0;
-    erreur_precedente = 0;
-    somme_erreurs = 0;
-
-    int pwm_d_base = pwm_droite;
-    int pwm_g_base = pwm_gauche;
-
-    Serial.println("Etape 1 démarrage");
-    
-    while (countRight < seuil_ticks) {
-        float erreur_ticks = (float)countLeft - (float)countRight;
-        float pid = calculerPID_escalier(erreur_ticks, Kp);
-
-        int pwm_d = pwm_d_base + pid;
-        int pwm_g = pwm_g_base - pid;
-
-        pwm_d = constrain(pwm_d, 0, 255);
-        pwm_g = constrain(pwm_g, 0, 255);
-
-        // INVERSION des directions pour correspondre au projet existant
-        // On était en HIGH,LOW pour IN_1_D et IN_2_D et LOW,HIGH pour IN_1_G et IN_2_G
-        // On inverse tout pour s'adapter au robot
-        digitalWrite(IN_1_D, LOW); digitalWrite(IN_2_D, HIGH);
-        digitalWrite(IN_1_G, HIGH);  digitalWrite(IN_2_G, LOW);
-        analogWrite(EN_D, pwm_d);
-        analogWrite(EN_G, pwm_g);
-
-        Serial.print("Ticks D: ");
-        Serial.print(countRight);
-        Serial.print(" | Ticks G: ");
-        Serial.print(countLeft);
-        Serial.print(" | PWM D: ");
-        Serial.print(pwm_d);
-        Serial.print(" | PWM G: ");
-        Serial.println(pwm_g);
-
-        delay(20);
-    }
-    arreter();
-    Serial.println("Etape 1 terminée");
-}
-
-// Étape 2
-void etape2() {
-  countLeft = 0;
-  countRight = 0;
-  erreur_precedente = 0;
-  somme_erreurs = 0;
-
-  int pwm_d_base = pwm_droite2;
-  int pwm_g_base = pwm_gauche2;
-
-  Serial.println("Etape 2 démarrage");
-
-  while (countLeft < seuil_ticks2) {
-      float erreur_ticks = (float)countLeft - (float)countRight;
-      float pid = calculerPID_escalier(erreur_ticks, Kp2);
-
-      int pwm_d = pwm_d_base + pid;
-      int pwm_g = pwm_g_base - pid;
-
-      pwm_d = constrain(pwm_d, 0, 255);
-      pwm_g = constrain(pwm_g, 0, 255);
-
-      // INVERSION des directions pour correspondre au projet existant
-      digitalWrite(IN_1_D, LOW); digitalWrite(IN_2_D, HIGH);
-      digitalWrite(IN_1_G, HIGH);  digitalWrite(IN_2_G, LOW);
-      analogWrite(EN_D, pwm_d);
-      analogWrite(EN_G, pwm_g);
-
-      Serial.print("Ticks D: ");
-      Serial.print(countRight);
-      Serial.print(" | Ticks G: ");
-      Serial.print(countLeft);
-      Serial.print(" | PWM D: ");
-      Serial.print(pwm_d);
-      Serial.print(" | PWM G: ");
-      Serial.println(pwm_g);
+    delay(20);
   }
-
-  arreter();
-  Serial.println("Etape 2 finie");
+  //arreter();
+  analogWrite(EN_D, 0); analogWrite(EN_G, 0);
+  digitalWrite(IN_1_D, LOW); digitalWrite(IN_2_D, LOW);
+  digitalWrite(IN_1_G, LOW); digitalWrite(IN_2_G, LOW);
 }
 
 // Fonction escalier principale
@@ -402,10 +323,6 @@ void sequenceEscalier() {
     orienterVersNord = false;
     
     Serial.println("=== Début de la séquence ESCALIER ===");
-    
-    avancerDistance(20);
-    arreter();
-    delay(300); // Pause pour stabiliser
 
     etape1();
     arreter();
@@ -495,7 +412,7 @@ void loop() {
     if (pos != -1) {
       sequenceActive = true;
       Serial.println("[loop] Commande reçue: Avancer distance");
-      avancerDistance(distance_cm);
+      avancerPrecisement(distance_cm);
       delay(100);
       sequenceActive = false;
       
