@@ -283,17 +283,17 @@ void etape2() {
   float Ki = 0;
   float Kd = 0;
 
-// Variables PID pour l'escalier
-float erreur = 0;
-float erreur_precedente = 0;
-float somme_erreurs = 0;
-float correction = 0;
+  // Variables PID pour l'escalier
+  float erreur = 0;
+  float erreur_precedente = 0;
+  float somme_erreurs = 0;
+  float correction = 0;
 
   digitalWrite(IN_1_D, LOW); digitalWrite(IN_2_D, HIGH);
   digitalWrite(IN_1_G, HIGH);  digitalWrite(IN_2_G, LOW);
     
   while (countLeft < seuil_ticks) {
-    float erreur = (float)countLeft - (float)countRight;
+    erreur = (float)countLeft - (float)countRight;
     somme_erreurs += erreur;
     correction = Kp * erreur + Ki * somme_erreurs + Kd * (erreur - erreur_precedente);
     erreur_precedente = erreur;
