@@ -7,7 +7,7 @@ LSM6DS3 imu(I2C_MODE, 0x6B);
 float biaisGyroZ = 0.0;
 
 // === WiFi ===
-const char* ssid = "DrawBot_WIFI";
+const char* ssid = "Drawbot_WIFI";
 const char* password = "12345678";
 WiFiServer server(80);
 
@@ -25,8 +25,8 @@ const int encoderRightA = 33;
 
 // === Magnetometre ===
 #define MAG_ADDR 0x1E
-const float offsetX = -1178; // Ou 1973.5
-const float offsetY = -844; // Ou -2641.5
+const float offsetX = 1973.5; // Ou -1178
+const float offsetY = -2641.5; // Ou -844
 const float TOLERANCE = 2.0;
 bool orienterVersNord = false;
 bool nordAtteint = true;
@@ -132,9 +132,9 @@ float lireAngleNord() {
   return angle;
 }
 
-// ---------------------------------------------------CALCULER ERREUR---------------------------------------------------
+// ---------------------------------------------------CALCULER ERREUR ANGLE---------------------------------------------------
 
-float calculerErreur(float angle, float cible = 0.0) {
+float calculerErreurAngle(float angle, float cible = 0.0) {
   float erreur = angle - cible;
   if (erreur > 180.0) erreur -= 360.0;
   if (erreur < -180.0) erreur += 360.0;
@@ -331,9 +331,54 @@ void sequenceEscalier() {
     etape2();
     arreter();
     delay(300); // Pause pour stabiliser
-    
-    Serial.println("=== Fin de la séquence ESCALIER ===");
 }
+
+void dessinerFlecheNord() {
+
+  // Segment diagonal gauche
+  countLeft = 0; countRight = 0;
+  while ((countLeft + countRight) / 2 < 100) { // 3 cm environ
+    digitalWrite(IN_1_D, LOW); digitalWrite(IN_2_D, HIGH); // recule Droit
+    digitalWrite(IN_1_G, HIGH); digitalWrite(IN_2_G, LOW); // recule Gauche
+    analogWrite(EN_D, 90);
+    analogWrite(EN_G, 60);
+  }
+  arreter();
+  delay(200);
+
+  // Retour
+  countLeft = 0; countRight = 0;
+  while ((countLeft + countRight) / 2 < 100) {
+    digitalWrite(IN_1_D, HIGH); digitalWrite(IN_2_D, LOW); // avance D
+    digitalWrite(IN_1_G, LOW);  digitalWrite(IN_2_G, HIGH); // avance G
+    analogWrite(EN_D, 90);
+    analogWrite(EN_G, 60);
+  }
+  arreter();
+  delay(200);
+
+  // Segment diagonal droit
+  countLeft = 0; countRight = 0;
+  while ((countLeft + countRight) / 2 < 100) {
+    digitalWrite(IN_1_D, LOW); digitalWrite(IN_2_D, HIGH); // recule D
+    digitalWrite(IN_1_G, HIGH); digitalWrite(IN_2_G, LOW); // recule G
+    analogWrite(EN_D, 60);
+    analogWrite(EN_G, 90);
+  }
+  arreter();
+  delay(200);
+
+  // Retour
+  countLeft = 0; countRight = 0;
+  while ((countLeft + countRight) / 2 < 100) {
+    digitalWrite(IN_1_D, HIGH); digitalWrite(IN_2_D, LOW); // avance D
+    digitalWrite(IN_1_G, LOW);  digitalWrite(IN_2_G, HIGH); // avance G
+    analogWrite(EN_D, 60);
+    analogWrite(EN_G, 90);
+  }
+  arreter();
+}
+
 
 // ------------------------------------------------------SETUP---------------------------------------------------
 
@@ -511,7 +556,7 @@ void loop() {
   // PARTIE 2: GESTION DE L'ORIENTATION NORD
   if (orienterVersNord && !nordAtteint) {
     float angle = lireAngleNord();
-    float erreur = calculerErreur(angle);
+    float erreur = calculerErreurAngle(angle);
     int pwm = calculerPWM(erreur);
     
     if (abs(erreur) <= TOLERANCE) {
@@ -524,24 +569,16 @@ void loop() {
     } else {
       droite(pwm, 60);
     }
-    delay(250);
+    delay(500);
   }
   
   // PARTIE 3: SÉQUENCE AUTOMATIQUE APRÈS NORD
   if (avancerApresNord && nordAtteint) {
     avancerApresNord = false; // Réinitialiser le flag pour éviter de répéter l'action
-    Serial.println("[loop] Démarrage séquence après orientation nord");
-
-    avancerPrecisement(10);
-    Serial.println("[loop] Premier déplacement 10cm terminé");
+    rotation(360.0);
+    delay(500);
+    dessinerFlecheNord();
     delay(500); // Pause pour stabilisation
-    
-    reculerPrecisement(10);
-    Serial.println("[loop] Recul 10cm terminé");
-    delay(500); // Pause pour stabilisation
-
-    avancerPrecisement(10);
-    Serial.println("[loop] Dernier déplacement 10cm terminé");
   }
 }
 
