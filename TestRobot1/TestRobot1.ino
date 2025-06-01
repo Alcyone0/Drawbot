@@ -239,8 +239,8 @@ void Escalier1() {
   const int pwm_g_base = 80;  // PWM roue gauche base
   const int seuil_ticks = 20*IMPULSIONS_PAR_CM; // seuil ticks pour étape1 (réduit pour un virage plus court)
 
-  const float Kp = 0.1;    // Coefficient proportionnel
-  const float Ki = 0.1;
+  const float Kp = 0.01;    // Coefficient proportionnel
+  const float Ki = 0;
   const float Kd = 0;
 
   // Variables PID pour l'escalier
@@ -250,7 +250,7 @@ void Escalier1() {
   float correction = 0;
     
   while ((countLeft+ countRight)/2 < seuil_ticks) {
-    erreur = (float)countLeft - (float)countRight;
+    erreur = (float)countRight - (float)countLeft;
     somme_erreurs += erreur;
     correction = Kp * erreur + Ki * somme_erreurs + Kd * (erreur - erreur_precedente);
     erreur_precedente = erreur;
@@ -265,7 +265,7 @@ void Escalier1() {
     analogWrite(EN_D, pwm_d);
     analogWrite(EN_G, pwm_g);
   }
-  
+
   arreter();
 }
 
@@ -287,7 +287,7 @@ void Escalier2() {
   float correction = 0;
     
   while (countLeft < seuil_ticks) {
-    erreur = (float)countLeft - (float)countRight;
+    erreur = (float)countRight - (float)countLeft;
     somme_erreurs += erreur;
     correction = Kp * erreur + Ki * somme_erreurs + Kd * (erreur - erreur_precedente);
     erreur_precedente = erreur;
@@ -310,9 +310,9 @@ void Escalier2() {
 // ----------------------------------------------Escalier 3-----------------------------------------------
 
 void Escalier3() {
-  const int pwm_d_base = 50; // PWM roue droite base
+  const int pwm_d_base = 60; // PWM roue droite base
   const int pwm_g_base = 110;  // PWM roue gauche base
-  const int seuil_ticks = 800; // seuil ticks pour étape1 (réduit pour un virage plus court)
+  const int seuil_ticks = 1000; // seuil ticks pour étape1 (réduit pour un virage plus court)
 
   float Kp = 0;  // Coefficient proportionnel pour la 2e étape
   float Ki = 0;
@@ -325,7 +325,7 @@ void Escalier3() {
   float correction = 0;
     
   while (countRight < seuil_ticks) {
-    erreur = (float)countLeft - (float)countRight;
+    erreur = (float)countRight - (float)countLeft;
     somme_erreurs += erreur;
     correction = Kp * erreur + Ki * somme_erreurs + Kd * (erreur - erreur_precedente);
     erreur_precedente = erreur;
@@ -669,17 +669,15 @@ void sendHtmlPage(WiFiClient client, String message) {
   
   // Commandes d'escalier
   html += "<h2>Commandes Escalier</h2>";
-  html += "<form method='GET'><input type='hidden' name='avancer_distance' value='1'>";
-  html += "<input type='submit' value='1. Avancer 20cm'></form><br>";
   
   html += "<form method='GET'><input type='hidden' name='escalier1' value='1'>";
-  html += "<input type='submit' value='2. Escalier 1'></form><br>";
+  html += "<input type='submit' value='1. Escalier 1'></form><br>";
   
   html += "<form method='GET'><input type='hidden' name='escalier2' value='1'>";
-  html += "<input type='submit' value='3. Escalier 2'></form><br>";
+  html += "<input type='submit' value='2. Escalier 2'></form><br>";
   
   html += "<form method='GET'><input type='hidden' name='escalier3' value='1'>";
-  html += "<input type='submit' value='4. Escalier 3'></form>";
+  html += "<input type='submit' value='3. Escalier 3'></form>";
 
   html += "</body></html>";
   
