@@ -247,9 +247,6 @@ void etape1() {
   float erreur_precedente = 0;
   float somme_erreurs = 0;
   float correction = 0;
-
-  digitalWrite(IN_1_D, LOW); digitalWrite(IN_2_D, HIGH);
-  digitalWrite(IN_1_G, HIGH);  digitalWrite(IN_2_G, LOW);
     
   while (countRight < seuil_ticks) {
     erreur = (float)countLeft - (float)countRight;
@@ -262,6 +259,8 @@ void etape1() {
 
     pwm_d = constrain(pwm_d, 0, 255);
     pwm_g = constrain(pwm_g, 0, 255);
+    digitalWrite(IN_1_D, LOW); digitalWrite(IN_2_D, HIGH);
+    digitalWrite(IN_1_G, HIGH);  digitalWrite(IN_2_G, LOW);
     analogWrite(EN_D, pwm_d);
     analogWrite(EN_G, pwm_g);
 
@@ -288,9 +287,6 @@ void etape2() {
   float erreur_precedente = 0;
   float somme_erreurs = 0;
   float correction = 0;
-
-  digitalWrite(IN_1_D, LOW); digitalWrite(IN_2_D, HIGH);
-  digitalWrite(IN_1_G, HIGH);  digitalWrite(IN_2_G, LOW);
     
   while (countLeft < seuil_ticks) {
     erreur = (float)countLeft - (float)countRight;
@@ -303,6 +299,8 @@ void etape2() {
 
     pwm_d = constrain(pwm_d, 0, 255);
     pwm_g = constrain(pwm_g, 0, 255);
+    digitalWrite(IN_1_D, LOW); digitalWrite(IN_2_D, HIGH);
+    digitalWrite(IN_1_G, HIGH);  digitalWrite(IN_2_G, LOW);
     analogWrite(EN_D, pwm_d);
     analogWrite(EN_G, pwm_g);
 
