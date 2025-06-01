@@ -25,8 +25,8 @@ const int encoderRightA = 33;
 
 // === Magnetometre ===
 #define MAG_ADDR 0x1E
-const float offsetX = -1178;
-const float offsetY = -844;
+const float offsetX = -1178; // Ou 1973.5
+const float offsetY = -844; // Ou -2641.5
 const float TOLERANCE = 2.0;
 bool orienterVersNord = false;
 bool nordAtteint = true;
@@ -49,11 +49,15 @@ bool sequenceActive = false;
 void countLeftEncoder() { countLeft++; }
 void countRightEncoder() { countRight++; }
 
+// ---------------------------------------------------ARRETER---------------------------------------------------
+
 void arreter() {
   analogWrite(EN_D, 0); analogWrite(EN_G, 0);
   digitalWrite(IN_1_D, LOW); digitalWrite(IN_2_D, LOW);
   digitalWrite(IN_1_G, LOW); digitalWrite(IN_2_G, LOW);
 }
+
+// ---------------------------------------------------AVANCER PRECISEMENT---------------------------------------------------
 
 void avancerPrecisement(float cm) {
   long seuil = cm * IMPULSIONS_PAR_CM;
@@ -68,6 +72,8 @@ void avancerPrecisement(float cm) {
   delay(150);
 }
 
+// ---------------------------------------------------RECULER PRECISEMENT---------------------------------------------------
+
 void reculerPrecisement(float cm) {
   long seuil = cm * IMPULSIONS_PAR_CM;
   countLeft = 0; countRight = 0;
@@ -80,6 +86,8 @@ void reculerPrecisement(float cm) {
   arreter();
   delay(150);
 }
+
+// ---------------------------------------------------ROTATION---------------------------------------------------
 
 void rotation(float angleCible) {
   float angleActuel = 0.0;
@@ -104,6 +112,8 @@ void rotation(float angleCible) {
   delay(150);
 }
 
+// ---------------------------------------------------LIRE ANGLE NORD---------------------------------------------------
+
 float lireAngleNord() {
   int16_t mx = 0, my = 0;
   Wire.beginTransmission(MAG_ADDR);
@@ -122,12 +132,16 @@ float lireAngleNord() {
   return angle;
 }
 
+// ---------------------------------------------------CALCULER ERREUR---------------------------------------------------
+
 float calculerErreur(float angle, float cible = 0.0) {
   float erreur = angle - cible;
   if (erreur > 180.0) erreur -= 360.0;
   if (erreur < -180.0) erreur += 360.0;
   return erreur;
 }
+
+// ---------------------------------------------------CALCULER PWM---------------------------------------------------
 
 int calculerPWM(float erreur) {
   float absErr = abs(erreur);
@@ -136,12 +150,16 @@ int calculerPWM(float erreur) {
   else return 150;
 }
 
+// ---------------------------------------------------TOURNER GAUCHE---------------------------------------------------
+
 void tournerGauche(int pwm) {
   digitalWrite(IN_1_D, HIGH); digitalWrite(IN_2_D, LOW);
   digitalWrite(IN_1_G, HIGH); digitalWrite(IN_2_G, LOW);
   analogWrite(EN_D, pwm);
   analogWrite(EN_G, pwm);
 }
+
+// ---------------------------------------------------TOURNER DROITE---------------------------------------------------
 
 void tournerDroite(int pwm) {
   digitalWrite(IN_1_D, LOW); digitalWrite(IN_2_D, HIGH);
@@ -162,6 +180,8 @@ void droite(int pwm, int duree) {
   arreter();
 }
 
+// ---------------------------------------------------AVANCER CORRIGE---------------------------------------------------
+
 void avancerCorrige() {
   digitalWrite(IN_1_D, HIGH); digitalWrite(IN_2_D, LOW);
   digitalWrite(IN_1_G, LOW);  digitalWrite(IN_2_G, HIGH);
@@ -177,6 +197,8 @@ void avancerCorrige() {
   analogWrite(EN_G, pwmG);
 }
 
+// ---------------------------------------------------CALIBRER GYRO---------------------------------------------------
+
 void calibrerGyro() {
   float somme = 0.0;
   const int N = 500;
@@ -187,25 +209,28 @@ void calibrerGyro() {
   biaisGyroZ = somme / N;
 }
 
-// === Paramètres de l'escalier ===
+// ---------------------------------------------------PARAMETRES ESCALIER---------------------------------------------------
+
 const int seuil1 = 195;             // Nombre de ticks pour la phase 1
 const int seuil2 = 1400;            // Nombre de ticks pour la phase 2
 const float coefP1 = 0.5;           // Coefficient proportionnel PID pour phase 1
 const float coefP2 = 0.11;          // Coefficient proportionnel PID pour phase 2
 
-// === PWM de base pour les moteurs ===
+// ---------------------------------------------------PWM BASE MOTEURS---------------------------------------------------
+
 // PWM initialement déséquilibrés pour corriger la trajectoire dés le départ
 const int vitesseDroite1 = 110;     // Moteur droit plus rapide
 const int vitesseGauche1 = 15;      // Moteur gauche plus lent
 const int vitesseDroite2 = 60;      // Valeurs équilibrées pour phase 2
 const int vitesseGauche2 = 60;
 
-// === PID interne ===
+// ---------------------------------------------------PID INTERNE---------------------------------------------------
+
 float erreurActuelle = 0;           // Différence actuelle entre les deux roues
 float erreurAvant = 0;              // Dernière erreur connue (pour dérivée)
 float cumulErreurs = 0;             // Somme des erreurs (intégrale)
 
-// Fonction générique de calcul PID
+// ---------------------------------------------------FONCTION PID---------------------------------------------------
 float ajustementPID(float err, float kp) {
   cumulErreurs += err;              // Mise à jour du cumul d'erreurs
   float sortie = kp * err;          // Seulement le terme proportionnel ici
@@ -213,7 +238,8 @@ float ajustementPID(float err, float kp) {
   return sortie;                    // Retourne la correction calculée
 }
 
-// Fonction pour avancer d'une certaine distance (en cm) en ligne droite
+// ---------------------------------------------------FONCTION AVANCER CM---------------------------------------------------
+
 void avancerCM(float cm) {
   long cible = cm * IMPULSIONS_PAR_CM;     // Conversion de la distance en ticks
   countLeft = 0;                    // Réinitialisation des compteurs d'encodeurs
@@ -242,7 +268,8 @@ void avancerCM(float cm) {
   arreter();                    // Stoppe les moteurs à la fin
 }
 
-// Étape 1 : avance d'un petit segment
+// ------------------------------------------------------PHASE 1---------------------------------------------------
+
 void phase1() {
   countLeft = 0;
   countRight = 0;
@@ -269,7 +296,8 @@ void phase1() {
   Serial.println("Phase 1 terminée");
 }
 
-// Étape 2 : avance d'un long segment (droite)
+// ---------------------------------------------------PHASE 2---------------------------------------------------
+
 void phase2() {
   countLeft = 0;
   countRight = 0;
@@ -296,7 +324,8 @@ void phase2() {
   Serial.println("Phase 2 terminée");
 }
 
-// Fonction principale de la séquence
+// ------------------------------------------------------SEQUENCE ESCALIER---------------------------------------------------
+
 void sequenceEscalier() {
   Serial.println("=== Début de la séquence ESCALIER ===");
   avancerCM(20);        // Premier déplacement
@@ -307,6 +336,8 @@ void sequenceEscalier() {
   delay(300);           // Stabilisation
   Serial.println("=== Fin de la séquence ===");
 }
+
+// ------------------------------------------------------SETUP---------------------------------------------------
 
 void setup() {
   Serial.begin(115200);
@@ -335,6 +366,8 @@ void setup() {
   Serial.println(WiFi.softAPIP());
   server.begin();
 }
+
+// ------------------------------------------------------LOOP---------------------------------------------------
 
 void loop() {
   WiFiClient client = server.available();
