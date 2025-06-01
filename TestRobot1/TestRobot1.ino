@@ -232,6 +232,8 @@ const float TICKS_PAR_CM = IMPULSIONS_PAR_CM; // Utilise la même valeur que le 
 
 // La fonction reculer a été supprimée car non utilisée
 
+// ----------------------------------------------Escalier 1-----------------------------------------------
+
 void Escalier1() {
   const int pwm_d_base = 80; // PWM roue droite base
   const int pwm_g_base = 80;  // PWM roue gauche base
@@ -267,6 +269,8 @@ void Escalier1() {
   }
   arreter();
 }
+
+// ----------------------------------------------Escalier 2-----------------------------------------------
 
 void Escalier2() {
   const int pwm_d_base = 190; // PWM roue droite base
@@ -304,10 +308,12 @@ void Escalier2() {
   arreter();
 }
 
+// ----------------------------------------------Escalier 3-----------------------------------------------
+
 void Escalier3() {
   const int pwm_d_base = 50; // PWM roue droite base
   const int pwm_g_base = 110;  // PWM roue gauche base
-  const int seuil_ticks = 1400; // seuil ticks pour étape1 (réduit pour un virage plus court)
+  const int seuil_ticks = 800; // seuil ticks pour étape1 (réduit pour un virage plus court)
 
   float Kp = 0.11;  // Coefficient proportionnel pour la 2e étape
   float Ki = 0;
@@ -340,6 +346,8 @@ void Escalier3() {
   arreter();
 }
 
+// ----------------------------------------------Sequence escalier-----------------------------------------------
+
 // Fonction escalier principale
 void sequenceEscalier() {
     // Réinitialisation des variables globales pour éviter les conflits
@@ -347,16 +355,16 @@ void sequenceEscalier() {
     correctionActive = false;
     nordAtteint = true;
     orienterVersNord = false;
-    
-    Serial.println("=== Début de la séquence ESCALIER ===");
 
     Escalier1();
-    delay(500);
+    delay(300);
     Escalier2();
-    delay(500);
+    delay(300);
     Escalier3();
-    delay(500);
+    delay(300);
 }
+
+// ----------------------------------------------Fonction dessiner fleche nord-----------------------------------------------
 
 void dessinerFlecheNord() {
 
@@ -404,7 +412,6 @@ void dessinerFlecheNord() {
   arreter();
 }
 
-
 // ------------------------------------------------------SETUP---------------------------------------------------
 
 void setup() {
@@ -450,32 +457,7 @@ void loop() {
     client.flush();
     int pos;
     
-    // Vérification pour etape1
-    pos = request.indexOf("etape1");
-    if (pos != -1) {
-      sequenceActive = true;
-      Serial.println("[loop] Commande reçue: Etape 1");
-      etape1();
-      delay(100);
-      sequenceActive = false;
-      
-      // Envoi de la page HTML avec message de confirmation
-      sendHtmlPage(client, "Étape 1 exécutée avec succès");
-      return;
-    }
-    
-    // Vérification pour etape2
-    pos = request.indexOf("etape2");
-    if (pos != -1) {
-      sequenceActive = true;
-      Serial.println("[loop] Commande reçue: Etape 2");
-      etape2();
-      delay(100);
-      sequenceActive = false;
-      
-      sendHtmlPage(client, "Étape 2 exécutée avec succès");
-      return;
-    }
+    // Les vérifications pour etape1 et etape2 ont été supprimées car remplacées par escalier1, escalier2 et escalier3
     
     // Vérification pour avancer_distance
     pos = request.indexOf("avancer_distance");
@@ -507,6 +489,48 @@ void loop() {
       rotation(360.0);
       
       sendHtmlPage(client, "Rotation 360° effectuée");
+      return;
+    }
+    
+    // Vérification pour escalier1
+    pos = request.indexOf("escalier1");
+    if (pos != -1) {
+      sequenceActive = true;
+      Serial.println("[loop] Commande reçue: Escalier 1");
+      countLeft = 0; countRight = 0;
+      Escalier1();
+      delay(100);
+      sequenceActive = false;
+      
+      sendHtmlPage(client, "Escalier 1 exécuté avec succès");
+      return;
+    }
+    
+    // Vérification pour escalier2
+    pos = request.indexOf("escalier2");
+    if (pos != -1) {
+      sequenceActive = true;
+      Serial.println("[loop] Commande reçue: Escalier 2");
+      countLeft = 0; countRight = 0;
+      Escalier2();
+      delay(100);
+      sequenceActive = false;
+      
+      sendHtmlPage(client, "Escalier 2 exécuté avec succès");
+      return;
+    }
+    
+    // Vérification pour escalier3
+    pos = request.indexOf("escalier3");
+    if (pos != -1) {
+      sequenceActive = true;
+      Serial.println("[loop] Commande reçue: Escalier 3");
+      countLeft = 0; countRight = 0;
+      Escalier3();
+      delay(100);
+      sequenceActive = false;
+      
+      sendHtmlPage(client, "Escalier 3 exécuté avec succès");
       return;
     }
     
@@ -607,22 +631,24 @@ void loop() {
   }
 }
 
+// -------------------------------------------------HTML-----------------------------------------------
+
 // Fonction pour envoyer la page HTML avec interface utilisateur
 void sendHtmlPage(WiFiClient client, String message) {
-  String html = "<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1.0'><title>Drawbot Controller</title>";
+  String html = "<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1.0'><title>Drawbot</title>";
   html += "<style>";
   html += "body{font-family:Arial;text-align:center;margin-top:50px;background:#f2f2f2;}";
-  html += "h1{color:#ff0066;}";
-  html += "form{background:#fff;padding:25px;border-radius:12px;box-shadow:0 0 10px #cc0066;display:inline-block;margin-bottom:20px;}";
-  html += "input{padding:10px;margin:10px;border-radius:5px;}";
-  html += "input[type=submit]{background:#ff66a3;color:white;border:none;cursor:pointer;}";
-  html += "input[type=submit]:hover{background:#cc0066;}";
-  html += ".message{background:#ffe6f0;padding:15px;border-radius:8px;margin:10px auto;max-width:500px;color:#cc0066;font-weight:bold;}";
+  html += "h1{color:#333;}";
+  html += "form{background:#fff;padding:20px;border-radius:10px;box-shadow:0 0 5px #999;display:inline-block;margin-bottom:15px;}";
+  html += "input{padding:8px;margin:8px;border-radius:4px;}";
+  html += "input[type=submit]{background:#4CAF50;color:white;border:none;cursor:pointer;}";
+  html += "input[type=submit]:hover{background:#45a049;}";
+  html += ".message{background:#e7f3fe;padding:10px;border-radius:5px;margin:10px auto;max-width:400px;}";
   html += "</style>";
   html += "</head><body>";
   html += "<h1>Commandes Drawbot</h1>";
   
-  // Affichage du message de statut si présent
+  // Affichage du message de statut si present
   if (message != "") {
     html += "<div class='message'>" + message + "</div><br>";
   }
@@ -634,25 +660,28 @@ void sendHtmlPage(WiFiClient client, String message) {
   
   // Commandes de rotation
   html += "<form method='GET'><input type='hidden' name='angle90' value='1'>";
-  html += "<input type='submit' value='Angle droit 90 deg'></form><br>";
+  html += "<input type='submit' value='Angle 90 deg'></form><br>";
   
   html += "<form method='GET'><input type='hidden' name='angle360' value='1'>";
-  html += "<input type='submit' value='Rotation complète 360 deg'></form><br>";
+  html += "<input type='submit' value='Rotation 360 deg'></form><br>";
   
   html += "<form method='GET'><input type='hidden' name='nord' value='1'>";
-  html += "<input type='submit' value='Indiquer le Nord'></form><br><br>";
+  html += "<input type='submit' value='Indiquer Nord'></form><br><br>";
   
   // Commandes d'escalier
-  html += "<h2>Commandes Étapes Escalier</h2>";
+  html += "<h2>Commandes Escalier</h2>";
   html += "<form method='GET'><input type='hidden' name='avancer_distance' value='1'>";
   html += "<input type='submit' value='1. Avancer 20cm'></form><br>";
   
-  html += "<form method='GET'><input type='hidden' name='etape1' value='1'>";
-  html += "<input type='submit' value='2. Étape 1 (Première marche)'></form><br>";
+  html += "<form method='GET'><input type='hidden' name='escalier1' value='1'>";
+  html += "<input type='submit' value='2. Escalier 1'></form><br>";
   
-  html += "<form method='GET'><input type='hidden' name='etape2' value='1'>";
-  html += "<input type='submit' value='3. Étape 2 (Deuxième marche)'></form>";
+  html += "<form method='GET'><input type='hidden' name='escalier2' value='1'>";
+  html += "<input type='submit' value='3. Escalier 2'></form><br>";
   
+  html += "<form method='GET'><input type='hidden' name='escalier3' value='1'>";
+  html += "<input type='submit' value='4. Escalier 3'></form>";
+
   html += "</body></html>";
   
   client.println("HTTP/1.1 200 OK");
