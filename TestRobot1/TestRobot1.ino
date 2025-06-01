@@ -239,7 +239,7 @@ void Escalier1() {
   const int pwm_g_base = 80;  // PWM roue gauche base
   const int seuil_ticks = 20*IMPULSIONS_PAR_CM; // seuil ticks pour étape1 (réduit pour un virage plus court)
 
-  const float Kp = 0.01;    // Coefficient proportionnel
+  const float Kp = 10;    // Coefficient proportionnel
   const float Ki = 0;
   const float Kd = 0;
 
@@ -345,9 +345,8 @@ void Escalier3() {
   arreter();
 }
 
-// ----------------------------------------------Sequence escalier-----------------------------------------------
+// ----------------------------------------------Sequence Escalier-----------------------------------------------
 
-// Fonction escalier principale
 void sequenceEscalier() {
     // Réinitialisation des variables globales pour éviter les conflits
     deplacementFait = true;
@@ -409,6 +408,14 @@ void dessinerFlecheNord() {
     analogWrite(EN_G, 90);
   }
   arreter();
+}
+
+// ----------------------------------------------Sequence Pomme-----------------------------------------------
+
+void sequencePomme() {
+  rotation(360.0);
+  dessinerFlecheNord();
+  delay(300);
 }
 
 // ------------------------------------------------------SETUP---------------------------------------------------
@@ -530,6 +537,20 @@ void loop() {
       sequenceActive = false;
       
       sendHtmlPage(client, "Escalier 3 exécuté avec succès");
+      return;
+    }
+    
+    // Vérification pour pomme
+    pos = request.indexOf("pomme");
+    if (pos != -1) {
+      sequenceActive = true;
+      Serial.println("[loop] Commande reçue: Séquence Pomme");
+      countLeft = 0; countRight = 0;
+      sequencePomme();
+      delay(100);
+      sequenceActive = false;
+      
+      sendHtmlPage(client, "Séquence Pomme exécutée avec succès");
       return;
     }
     
@@ -659,10 +680,10 @@ void sendHtmlPage(WiFiClient client, String message) {
   
   // Commandes de rotation
   html += "<form method='GET'><input type='hidden' name='angle90' value='1'>";
-  html += "<input type='submit' value='Angle 90 deg'></form><br>";
+  html += "<input type='submit' value='Angle 90'></form><br>";
   
   html += "<form method='GET'><input type='hidden' name='angle360' value='1'>";
-  html += "<input type='submit' value='Rotation 360 deg'></form><br>";
+  html += "<input type='submit' value='Cercle'></form><br>";
   
   html += "<form method='GET'><input type='hidden' name='nord' value='1'>";
   html += "<input type='submit' value='Indiquer Nord'></form><br><br>";
@@ -671,13 +692,17 @@ void sendHtmlPage(WiFiClient client, String message) {
   html += "<h2>Commandes Escalier</h2>";
   
   html += "<form method='GET'><input type='hidden' name='escalier1' value='1'>";
-  html += "<input type='submit' value='1. Escalier 1'></form><br>";
+  html += "<input type='submit' value='Escalier 1'></form><br>";
   
   html += "<form method='GET'><input type='hidden' name='escalier2' value='1'>";
-  html += "<input type='submit' value='2. Escalier 2'></form><br>";
+  html += "<input type='submit' value='Escalier 2'></form><br>";
   
   html += "<form method='GET'><input type='hidden' name='escalier3' value='1'>";
-  html += "<input type='submit' value='3. Escalier 3'></form>";
+  html += "<input type='submit' value='Escalier 3'></form><br>";
+  
+  // Bouton pour la séquence pomme
+  html += "<form method='GET'><input type='hidden' name='pomme' value='1'>";
+  html += "<input type='submit' value='Pomme'></form>";
 
   html += "</body></html>";
   
