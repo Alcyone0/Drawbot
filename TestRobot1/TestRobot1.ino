@@ -2,20 +2,16 @@
 #include <Wire.h>
 #include <SparkFunLSM6DS3.h>
 
-// === IMU ===
 LSM6DS3 imu(I2C_MODE, 0x6B);
 float biaisGyroZ = 0.0;
 
-// === WiFi ===
 const char* ssid = "Drawbot_WIFI";
 const char* password = "12345678";
 WiFiServer server(80);
 
-// === Encodeurs ===
 const int encoderLeftA = 27;
 const int encoderRightA = 33;
 
-// === Moteurs ===
 #define IN_1_D 19
 #define IN_2_D 18
 #define IN_1_G 17
@@ -23,16 +19,14 @@ const int encoderRightA = 33;
 #define EN_D   23
 #define EN_G   4
 
-// === Magnetometre ===
 #define MAG_ADDR 0x1E
-const float offsetX = 1973.5; // Ou -1178
-const float offsetY = -2641.5; // Ou -844
+const float offsetX = 1973.5;
+const float offsetY = -2641.5;
 const float TOLERANCE = 2.0;
 bool orienterVersNord = false;
 bool nordAtteint = true;
-bool avancerApresNord = false; // Flag pour déclencher l'avancement après orientation nord
+bool avancerApresNord = false;
 
-// === Variables ===
 volatile long countLeft = 0;
 volatile long countRight = 0;
 const float IMPULSIONS_PAR_CM = 34.0;
@@ -182,19 +176,16 @@ void droite(int pwm, int duree) {
 
 // ---------------------------------------------------AVANCER CORRIGE---------------------------------------------------
 
-// Version simplifiée sans correction d'erreur dynamique
 void avancerCorrige() {
   digitalWrite(IN_1_D, HIGH); digitalWrite(IN_2_D, LOW);
   digitalWrite(IN_1_G, LOW);  digitalWrite(IN_2_G, HIGH);
-  
-  // Utilisation du même système PID que pour l'escalier
+
   float erreur_encoder = countRight - countLeft;
-  float correction_pid = 4.5 * erreur_encoder; // On garde le Kp original
+  float correction_pid = 4.5 * erreur_encoder;
   
   long moyenne = (countLeft + countRight) / 2;
   long reste = seuilImpulsions - moyenne;
   
-  // On simplifie pour une vitesse plus constante comme dans l'escalier
   int pwmBase = basePWM_D;
   int pwmD = constrain(pwmBase + correction_pid, 70, 255);
   int pwmG = constrain(pwmBase - correction_pid, 70, 255);
@@ -202,7 +193,6 @@ void avancerCorrige() {
   analogWrite(EN_D, pwmD);
   analogWrite(EN_G, pwmG);
   
-  // Log pour débogage
   if (countLeft % 100 == 0 || countRight % 100 == 0) {
     Serial.print("[avancerCorrige] Ticks D/G: ");
     Serial.print(countRight); Serial.print("/");
@@ -224,26 +214,17 @@ void calibrerGyro() {
   biaisGyroZ = somme / N;
 }
 
-// --- PARAMETRES ESCALIER --- //
-
-// Variables modifiables dans le site web
-int distance_cm = 20;
-const float TICKS_PAR_CM = IMPULSIONS_PAR_CM; // Utilise la même valeur que le reste du code
-
-// La fonction reculer a été supprimée car non utilisée
-
 // ----------------------------------------------Escalier 1-----------------------------------------------
 
 void Escalier1() {
-  const int pwm_d_base = 80; // PWM roue droite base
-  const int pwm_g_base = 80;  // PWM roue gauche base
-  const int seuil_ticks = 20*IMPULSIONS_PAR_CM; // seuil ticks pour étape1 (réduit pour un virage plus court)
+  const int pwm_d_base = 80;
+  const int pwm_g_base = 80;
+  const int seuil_ticks = 20*IMPULSIONS_PAR_CM;
 
-  const float Kp = 10;    // Coefficient proportionnel
+  const float Kp = 10;
   const float Ki = 0;
   const float Kd = 0;
 
-  // Variables PID pour l'escalier
   float erreur = 0;
   float erreur_precedente = 0;
   float somme_erreurs = 0;
@@ -272,15 +253,14 @@ void Escalier1() {
 // ----------------------------------------------Escalier 2-----------------------------------------------
 
 void Escalier2() {
-  const int pwm_d_base = 190; // PWM roue droite base
-  const int pwm_g_base = 10;  // PWM roue gauche base
-  const int seuil_ticks = 80; // seuil ticks pour étape1 (réduit pour un virage plus court)
+  const int pwm_d_base = 190;
+  const int pwm_g_base = 10;
+  const int seuil_ticks = 80;
 
-  const float Kp = 0;    // Coefficient proportionnel
+  const float Kp = 0;
   const float Ki = 0;
   const float Kd = 0;
 
-  // Variables PID pour l'escalier
   float erreur = 0;
   float erreur_precedente = 0;
   float somme_erreurs = 0;
@@ -310,15 +290,14 @@ void Escalier2() {
 // ----------------------------------------------Escalier 3-----------------------------------------------
 
 void Escalier3() {
-  const int pwm_d_base = 60; // PWM roue droite base
-  const int pwm_g_base = 110;  // PWM roue gauche base
-  const int seuil_ticks = 1000; // seuil ticks pour étape1 (réduit pour un virage plus court)
+  const int pwm_d_base = 60;
+  const int pwm_g_base = 110;
+  const int seuil_ticks = 1000;
 
-  float Kp = 0;  // Coefficient proportionnel pour la 2e étape
+  float Kp = 0;
   float Ki = 0;
   float Kd = 0;
 
-  // Variables PID pour l'escalier
   float erreur = 0;
   float erreur_precedente = 0;
   float somme_erreurs = 0;
@@ -348,7 +327,6 @@ void Escalier3() {
 // ----------------------------------------------Sequence Escalier-----------------------------------------------
 
 void sequenceEscalier() {
-    // Réinitialisation des variables globales pour éviter les conflits
     deplacementFait = true;
     correctionActive = false;
     nordAtteint = true;
@@ -365,45 +343,40 @@ void sequenceEscalier() {
 // ----------------------------------------------Fonction dessiner fleche nord-----------------------------------------------
 
 void dessinerFlecheNord() {
-
-  // Segment diagonal gauche
   countLeft = 0; countRight = 0;
-  while ((countLeft + countRight) / 2 < 100) { // 3 cm environ
-    digitalWrite(IN_1_D, LOW); digitalWrite(IN_2_D, HIGH); // recule Droit
-    digitalWrite(IN_1_G, HIGH); digitalWrite(IN_2_G, LOW); // recule Gauche
+  while ((countLeft + countRight) / 2 < 100) {
+    digitalWrite(IN_1_D, LOW); digitalWrite(IN_2_D, HIGH);
+    digitalWrite(IN_1_G, HIGH); digitalWrite(IN_2_G, LOW);
     analogWrite(EN_D, 90);
     analogWrite(EN_G, 60);
   }
   arreter();
   delay(200);
 
-  // Retour
   countLeft = 0; countRight = 0;
   while ((countLeft + countRight) / 2 < 100) {
-    digitalWrite(IN_1_D, HIGH); digitalWrite(IN_2_D, LOW); // avance D
-    digitalWrite(IN_1_G, LOW);  digitalWrite(IN_2_G, HIGH); // avance G
+    digitalWrite(IN_1_D, HIGH); digitalWrite(IN_2_D, LOW);
+    digitalWrite(IN_1_G, LOW);  digitalWrite(IN_2_G, HIGH);
     analogWrite(EN_D, 90);
     analogWrite(EN_G, 60);
   }
   arreter();
   delay(200);
 
-  // Segment diagonal droit
   countLeft = 0; countRight = 0;
   while ((countLeft + countRight) / 2 < 100) {
-    digitalWrite(IN_1_D, LOW); digitalWrite(IN_2_D, HIGH); // recule D
-    digitalWrite(IN_1_G, HIGH); digitalWrite(IN_2_G, LOW); // recule G
+    digitalWrite(IN_1_D, LOW); digitalWrite(IN_2_D, HIGH);
+    digitalWrite(IN_1_G, HIGH); digitalWrite(IN_2_G, LOW);
     analogWrite(EN_D, 60);
     analogWrite(EN_G, 90);
   }
   arreter();
   delay(200);
 
-  // Retour
   countLeft = 0; countRight = 0;
   while ((countLeft + countRight) / 2 < 100) {
-    digitalWrite(IN_1_D, HIGH); digitalWrite(IN_2_D, LOW); // avance D
-    digitalWrite(IN_1_G, LOW);  digitalWrite(IN_2_G, HIGH); // avance G
+    digitalWrite(IN_1_D, HIGH); digitalWrite(IN_2_D, LOW);
+    digitalWrite(IN_1_G, LOW);  digitalWrite(IN_2_G, HIGH);
     analogWrite(EN_D, 60);
     analogWrite(EN_G, 90);
   }
@@ -448,127 +421,93 @@ void setup() {
   server.begin();
 }
 
-// Prototype de la fonction sendHtmlPage pour pouvoir l'utiliser dans loop()
 void sendHtmlPage(WiFiClient client, String message = "");
 
 // ------------------------------------------------------LOOP---------------------------------------------------
 
 void loop() {
-  // Gérer les requêtes WiFi entrantes
   WiFiClient client = server.available();
   if (client) {
-    Serial.println("[loop] Nouvelle connexion client");
     while (!client.available()) delay(1);
     String request = client.readStringUntil('\r');
     client.flush();
     int pos;
     
-    // Les vérifications pour etape1 et etape2 ont été supprimées car remplacées par escalier1, escalier2 et escalier3
-    
-    // Vérification pour avancer_distance
-    pos = request.indexOf("avancer_distance");
-    if (pos != -1) {
-      sequenceActive = true;
-      Serial.println("[loop] Commande reçue: Avancer distance");
-      avancerPrecisement(distance_cm);
-      delay(100);
-      sequenceActive = false;
-      
-      sendHtmlPage(client, "Avancé de " + String(distance_cm) + "cm");
-      return;
-    }
-    
-    // Vérification pour angle90
     pos = request.indexOf("angle90");
     if (pos != -1) {
-      Serial.println("[loop] Commande reçue: Rotation 90 degrés");
       rotation(90.0);
       
-      sendHtmlPage(client, "Rotation 90° effectuée");
+      sendHtmlPage(client, "Rotation 90 effectuee");
       return;
     }
     
-    // Vérification pour angle360
     pos = request.indexOf("angle360");
     if (pos != -1) {
-      Serial.println("[loop] Commande reçue: Rotation 360 degrés");
       rotation(360.0);
       
-      sendHtmlPage(client, "Rotation 360° effectuée");
+      sendHtmlPage(client, "Rotation 360 effectuee");
       return;
     }
     
-    // Vérification pour escalier1
     pos = request.indexOf("escalier1");
     if (pos != -1) {
       sequenceActive = true;
-      Serial.println("[loop] Commande reçue: Escalier 1");
       countLeft = 0; countRight = 0;
       Escalier1();
       delay(100);
       sequenceActive = false;
       
-      sendHtmlPage(client, "Escalier 1 exécuté avec succès");
+      sendHtmlPage(client, "Escalier 1 execute");
       return;
     }
     
-    // Vérification pour escalier2
     pos = request.indexOf("escalier2");
     if (pos != -1) {
       sequenceActive = true;
-      Serial.println("[loop] Commande reçue: Escalier 2");
       countLeft = 0; countRight = 0;
       Escalier2();
       delay(100);
       sequenceActive = false;
       
-      sendHtmlPage(client, "Escalier 2 exécuté avec succès");
+      sendHtmlPage(client, "Escalier 2 execute");
       return;
     }
     
-    // Vérification pour escalier3
     pos = request.indexOf("escalier3");
     if (pos != -1) {
       sequenceActive = true;
-      Serial.println("[loop] Commande reçue: Escalier 3");
       countLeft = 0; countRight = 0;
       Escalier3();
       delay(100);
       sequenceActive = false;
       
-      sendHtmlPage(client, "Escalier 3 exécuté avec succès");
+      sendHtmlPage(client, "Escalier 3 execute");
       return;
     }
     
-    // Vérification pour pomme
     pos = request.indexOf("pomme");
     if (pos != -1) {
       sequenceActive = true;
-      Serial.println("[loop] Commande reçue: Séquence Pomme");
       countLeft = 0; countRight = 0;
       sequencePomme();
       delay(100);
       sequenceActive = false;
       
-      sendHtmlPage(client, "Séquence Pomme exécutée avec succès");
+      sendHtmlPage(client, "Sequence Pomme execute");
       return;
     }
     
-    // Vérification pour nord
     pos = request.indexOf("nord");
     if (pos != -1) {
-      Serial.println("[loop] Commande reçue: Orienter vers le Nord");
       orienterVersNord = true;
       nordAtteint = false;
       
-      sendHtmlPage(client, "Orientation vers le Nord lancée");
+      sendHtmlPage(client, "Orientation vers le Nord lancee");
       return;
     }
     
-    // Commande avancer d'une distance
     pos = request.indexOf("d=");
     if (pos != -1) {
-      // Extraction du paramètre de distance
       int fin = request.indexOf(" ", pos);
       String param = request.substring(pos+2, fin);
       distanceCM = param.toFloat();
@@ -578,51 +517,35 @@ void loop() {
       deplacementFait = false;
       correctionActive = true;
       
-      Serial.print("[loop] Commande reçue: Avancer de ");
-      Serial.print(distanceCM);
-      Serial.println(" cm");
-      
-      // Pour ce cas, on envoie la page HTML avec un message de confirmation
-      sendHtmlPage(client, "Avancement de " + param + "cm démarré");
+      sendHtmlPage(client, "Avancement de " + param + "cm demarre");  
       return;
     }
     
-    // Page d'accueil par défaut
+    sendHtmlPage(client, "");
     sendHtmlPage(client, "");
   }
   
-  // PARTIE 1: GESTION DU DÉPLACEMENT NORMAL
   long moyenne = (countLeft + countRight) / 2;
   long reste = seuilImpulsions - moyenne;
   
   if (correctionActive && !deplacementFait) {
     if (reste <= 5) {
-      // Fin du déplacement - objectif atteint
       arreter();
       deplacementFait = true;
       correctionActive = false;
-      Serial.println("[loop] Déplacement terminé avec succès");
     } else {
-      // Déplacement en cours avec PID
       avancerCorrige();
-      // Log pour suivi des encodeurs
       if (countLeft % 100 == 0 || countRight % 100 == 0) {
-        Serial.print("[loop] Encodeurs - G/D: "); 
-        Serial.print(countLeft); Serial.print("/");
-        Serial.println(countRight);
       }
     }
   }
   
-  // Sécurité pour arrêter si le seuil est atteint mais le flag n'est pas mis à jour
   if (!deplacementFait && moyenne >= seuilImpulsions) {
     arreter();
     correctionActive = false;
     deplacementFait = true;
-    Serial.println("[loop] Déplacement terminé par limite d'impulsions");
   }
   
-  // PARTIE 2: GESTION DE L'ORIENTATION NORD
   if (orienterVersNord && !nordAtteint) {
     float angle = lireAngleNord();
     float erreur = calculerErreurAngle(angle);
@@ -631,8 +554,7 @@ void loop() {
     if (abs(erreur) <= TOLERANCE) {
       arreter();
       nordAtteint = true;
-      avancerApresNord = true; // Déclencher l'avancement après avoir atteint le nord
-      Serial.println("[loop] Nord atteint! Déclenchement de la séquence automatique");
+      avancerApresNord = true;
     } else if (erreur > 0) {
       gauche(pwm, 60);
     } else {
@@ -641,44 +563,39 @@ void loop() {
     delay(500);
   }
   
-  // PARTIE 3: SÉQUENCE AUTOMATIQUE APRÈS NORD
   if (avancerApresNord && nordAtteint) {
-    avancerApresNord = false; // Réinitialiser le flag pour éviter de répéter l'action
+    avancerApresNord = false;
     rotation(360.0);
     delay(500);
     dessinerFlecheNord();
-    delay(500); // Pause pour stabilisation
+    delay(500);
   }
 }
 
 // -------------------------------------------------HTML-----------------------------------------------
 
-// Fonction pour envoyer la page HTML avec interface utilisateur
 void sendHtmlPage(WiFiClient client, String message) {
   String html = "<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1.0'><title>Drawbot</title>";
   html += "<style>";
-  html += "body{font-family:Arial;text-align:center;margin-top:50px;background:#f2f2f2;}";
+  html += "body{font-family:Arial;text-align:center;margin-top:50px;background:#e6f2ff;}";
   html += "h1{color:#333;}";
   html += "form{background:#fff;padding:20px;border-radius:10px;box-shadow:0 0 5px #999;display:inline-block;margin-bottom:15px;}";
   html += "input{padding:8px;margin:8px;border-radius:4px;}";
-  html += "input[type=submit]{background:#4CAF50;color:white;border:none;cursor:pointer;}";
-  html += "input[type=submit]:hover{background:#45a049;}";
+  html += "input[type=submit]{background:#ff66b3;color:white;border:none;cursor:pointer;}";
+  html += "input[type=submit]:hover{background:#ff3399;}";
   html += ".message{background:#e7f3fe;padding:10px;border-radius:5px;margin:10px auto;max-width:400px;}";
   html += "</style>";
   html += "</head><body>";
   html += "<h1>Commandes Drawbot</h1>";
   
-  // Affichage du message de statut si present
   if (message != "") {
     html += "<div class='message'>" + message + "</div><br>";
   }
   
-  // Formulaire pour avancer d'une distance
   html += "<form method='GET'><label>Distance (cm)</label><br>";
   html += "<input type='number' name='d' min='1' max='100' value='10'><br>";
   html += "<input type='submit' value='Avancer'></form><br><br>";
   
-  // Commandes de rotation
   html += "<form method='GET'><input type='hidden' name='angle90' value='1'>";
   html += "<input type='submit' value='Angle 90'></form><br>";
   
@@ -688,7 +605,6 @@ void sendHtmlPage(WiFiClient client, String message) {
   html += "<form method='GET'><input type='hidden' name='nord' value='1'>";
   html += "<input type='submit' value='Indiquer Nord'></form><br><br>";
   
-  // Commandes d'escalier
   html += "<h2>Commandes Escalier</h2>";
   
   html += "<form method='GET'><input type='hidden' name='escalier1' value='1'>";
@@ -700,7 +616,6 @@ void sendHtmlPage(WiFiClient client, String message) {
   html += "<form method='GET'><input type='hidden' name='escalier3' value='1'>";
   html += "<input type='submit' value='Escalier 3'></form><br>";
   
-  // Bouton pour la séquence pomme
   html += "<form method='GET'><input type='hidden' name='pomme' value='1'>";
   html += "<input type='submit' value='Pomme'></form>";
 
@@ -711,5 +626,4 @@ void sendHtmlPage(WiFiClient client, String message) {
   client.println(); 
   client.println(html); 
   client.stop();
-  Serial.println("[loop] Page HTML envoyée");
 }
