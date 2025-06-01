@@ -239,8 +239,8 @@ void Escalier1() {
   const int pwm_g_base = 80;  // PWM roue gauche base
   const int seuil_ticks = 20*IMPULSIONS_PAR_CM; // seuil ticks pour étape1 (réduit pour un virage plus court)
 
-  const float Kp = 0.5;    // Coefficient proportionnel
-  const float Ki = 0;
+  const float Kp = 0.1;    // Coefficient proportionnel
+  const float Ki = 0.1;
   const float Kd = 0;
 
   // Variables PID pour l'escalier
@@ -264,9 +264,8 @@ void Escalier1() {
     digitalWrite(IN_1_G, HIGH);  digitalWrite(IN_2_G, LOW);
     analogWrite(EN_D, pwm_d);
     analogWrite(EN_G, pwm_g);
-
-    delay(20);
   }
+  
   arreter();
 }
 
@@ -277,7 +276,7 @@ void Escalier2() {
   const int pwm_g_base = 10;  // PWM roue gauche base
   const int seuil_ticks = 80; // seuil ticks pour étape1 (réduit pour un virage plus court)
 
-  const float Kp = 0.5;    // Coefficient proportionnel
+  const float Kp = 0;    // Coefficient proportionnel
   const float Ki = 0;
   const float Kd = 0;
 
@@ -315,7 +314,7 @@ void Escalier3() {
   const int pwm_g_base = 110;  // PWM roue gauche base
   const int seuil_ticks = 800; // seuil ticks pour étape1 (réduit pour un virage plus court)
 
-  float Kp = 0.11;  // Coefficient proportionnel pour la 2e étape
+  float Kp = 0;  // Coefficient proportionnel pour la 2e étape
   float Ki = 0;
   float Kd = 0;
 
