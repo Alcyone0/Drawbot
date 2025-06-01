@@ -248,7 +248,7 @@ void etape1() {
   float somme_erreurs = 0;
   float correction = 0;
     
-  while (countRight < seuil_ticks) {
+  while (countLeft < seuil_ticks) {
     erreur = (float)countLeft - (float)countRight;
     somme_erreurs += erreur;
     correction = Kp * erreur + Ki * somme_erreurs + Kd * (erreur - erreur_precedente);
@@ -288,7 +288,7 @@ void etape2() {
   float somme_erreurs = 0;
   float correction = 0;
     
-  while (countLeft < seuil_ticks) {
+  while (countRight < seuil_ticks) {
     erreur = (float)countLeft - (float)countRight;
     somme_erreurs += erreur;
     correction = Kp * erreur + Ki * somme_erreurs + Kd * (erreur - erreur_precedente);
