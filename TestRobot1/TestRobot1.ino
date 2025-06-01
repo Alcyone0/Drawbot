@@ -287,7 +287,7 @@ void Escalier2() {
   float somme_erreurs = 0;
   float correction = 0;
     
-  while (countLeft < seuil_ticks) {
+  while ((countLeft+ countRight)/2 < seuil_ticks) {
     erreur = (float)countLeft - (float)countRight;
     somme_erreurs += erreur;
     correction = Kp * erreur + Ki * somme_erreurs + Kd * (erreur - erreur_precedente);
