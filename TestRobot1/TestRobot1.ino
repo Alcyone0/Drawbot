@@ -132,9 +132,9 @@ float lireAngleNord() {
   return angle;
 }
 
-// ---------------------------------------------------CALCULER ERREUR---------------------------------------------------
+// ---------------------------------------------------CALCULER ERREUR ANGLE---------------------------------------------------
 
-float calculerErreur(float angle, float cible = 0.0) {
+float calculerErreurAngle(float angle, float cible = 0.0) {
   float erreur = angle - cible;
   if (erreur > 180.0) erreur -= 360.0;
   if (erreur < -180.0) erreur += 360.0;
@@ -233,8 +233,8 @@ int pwm_droite2 = 50;      // PWM roue droite 2
 int pwm_gauche2 = 110;     // PWM roue gauche 2
 
 // Valeurs des coefficients de correction PID pour l'escalier
-float Kp = 0.5;    // Coefficient proportionnel
-float Kp2 = 0.11;  // Coefficient proportionnel pour la 2e étape
+float Kp = 0.5;            // Coefficient proportionnel
+float Kp2 = 0.11;          // Coefficient proportionnel pour la 2e étape
 float Ki = 0;
 float Kd = 0;
 
@@ -303,8 +303,6 @@ void avancerDistance(int cm) {
     arreter();
     Serial.println("Fin avancerDistance");
 }
-
-// La fonction reculer a été supprimée car non utilisée
 
 // Étape 1 du déplacement en escalier
 void etape1() {
@@ -594,7 +592,7 @@ void loop() {
   // PARTIE 2: GESTION DE L'ORIENTATION NORD
   if (orienterVersNord && !nordAtteint) {
     float angle = lireAngleNord();
-    float erreur = calculerErreur(angle);
+    float erreur = calculerErreurAngle(angle);
     int pwm = calculerPWM(erreur);
     
     if (abs(erreur) <= TOLERANCE) {
