@@ -232,8 +232,43 @@ const float TICKS_PAR_CM = IMPULSIONS_PAR_CM; // Utilise la même valeur que le 
 
 // La fonction reculer a été supprimée car non utilisée
 
-// Étape 1 du déplacement en escalier
-void etape1() {
+void Escalier1() {
+  const int pwm_d_base = 80; // PWM roue droite base
+  const int pwm_g_base = 80;  // PWM roue gauche base
+  const int seuil_ticks = 20*IMPULSIONS_PAR_CM; // seuil ticks pour étape1 (réduit pour un virage plus court)
+
+  const float Kp = 0.5;    // Coefficient proportionnel
+  const float Ki = 0;
+  const float Kd = 0;
+
+  // Variables PID pour l'escalier
+  float erreur = 0;
+  float erreur_precedente = 0;
+  float somme_erreurs = 0;
+  float correction = 0;
+    
+  while (countLeft < seuil_ticks) {
+    erreur = (float)countLeft - (float)countRight;
+    somme_erreurs += erreur;
+    correction = Kp * erreur + Ki * somme_erreurs + Kd * (erreur - erreur_precedente);
+    erreur_precedente = erreur;
+
+    int pwm_d = pwm_d_base + correction;
+    int pwm_g = pwm_g_base - correction;
+
+    pwm_d = constrain(pwm_d, 0, 255);
+    pwm_g = constrain(pwm_g, 0, 255);
+    digitalWrite(IN_1_D, LOW); digitalWrite(IN_2_D, HIGH);
+    digitalWrite(IN_1_G, HIGH);  digitalWrite(IN_2_G, LOW);
+    analogWrite(EN_D, pwm_d);
+    analogWrite(EN_G, pwm_g);
+
+    delay(20);
+  }
+  arreter();
+}
+
+void Escalier2() {
   const int pwm_d_base = 190; // PWM roue droite base
   const int pwm_g_base = 10;  // PWM roue gauche base
   const int seuil_ticks = 80; // seuil ticks pour étape1 (réduit pour un virage plus court)
@@ -266,14 +301,10 @@ void etape1() {
 
     delay(20);
   }
-  //arreter();
-  analogWrite(EN_D, 0); analogWrite(EN_G, 0);
-  digitalWrite(IN_1_D, LOW); digitalWrite(IN_2_D, LOW);
-  digitalWrite(IN_1_G, LOW); digitalWrite(IN_2_G, LOW);
+  arreter();
 }
 
-// Étape 2 du déplacement en escalier
-void etape2() {
+void Escalier3() {
   const int pwm_d_base = 50; // PWM roue droite base
   const int pwm_g_base = 110;  // PWM roue gauche base
   const int seuil_ticks = 1400; // seuil ticks pour étape1 (réduit pour un virage plus court)
@@ -306,10 +337,7 @@ void etape2() {
 
     delay(20);
   }
-  //arreter();
-  analogWrite(EN_D, 0); analogWrite(EN_G, 0);
-  digitalWrite(IN_1_D, LOW); digitalWrite(IN_2_D, LOW);
-  digitalWrite(IN_1_G, LOW); digitalWrite(IN_2_G, LOW);
+  arreter();
 }
 
 // Fonction escalier principale
@@ -322,13 +350,12 @@ void sequenceEscalier() {
     
     Serial.println("=== Début de la séquence ESCALIER ===");
 
-    etape1();
-    arreter();
-    delay(300); // Pause pour stabiliser
-
-    etape2();
-    arreter();
-    delay(300); // Pause pour stabiliser
+    Escalier1();
+    delay(500);
+    Escalier2();
+    delay(500);
+    Escalier3();
+    delay(500);
 }
 
 void dessinerFlecheNord() {
